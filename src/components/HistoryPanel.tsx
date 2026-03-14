@@ -13,6 +13,7 @@ interface HistoryEntry {
 
 interface HistoryEvent {
   timestamp: string;
+  lastTimestamp: string;
   entries: HistoryEntry[];
   summary: string;
   totalRecords?: number;
@@ -84,6 +85,7 @@ function buildEvent(entries: HistoryEntry[]): HistoryEvent {
 
   return {
     timestamp: entries[0].created_at,
+    lastTimestamp: entries[entries.length - 1].created_at,
     entries,
     summary: parts.join(', ') || '변경 없음',
   };
@@ -128,8 +130,8 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
 
     setRestoring(true);
     try {
-      // Get the timestamp of this event - we want state BEFORE this event
-      const eventTime = event.timestamp;
+      // Use the last timestamp of the group to include all entries in this event
+      const endTime = event.lastTimestamp;
 
       // Strategy: get all history entries up to and including this event,
       // then reconstruct each record's latest state
@@ -137,7 +139,7 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
         .from('record_history')
         .select('*')
         .eq('project_id', projectId)
-        .lte('created_at', eventTime)
+        .lte('created_at', endTime)
         .order('created_at', { ascending: true });
 
       if (error) {
