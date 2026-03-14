@@ -1,24 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Project, TreeRecord } from './types';
+import { supabase } from './lib/supabase';
 import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
+import PinScreen, { isAuthed } from './components/PinScreen';
 
-const STORAGE_KEY = 'papa_01_projects';
-const SELECTED_KEY = 'papa_01_selected';
 const DARK_KEY = 'papa_01_dark';
-
-function loadProjects(): Project[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadSelectedId(): string | null {
-  return localStorage.getItem(SELECTED_KEY);
-}
 
 function loadDark(): boolean {
   const saved = localStorage.getItem(DARK_KEY);
@@ -29,66 +16,169 @@ function loadDark(): boolean {
 type Tab = 'input' | 'result';
 
 export default function App() {
-  const [projects, setProjects] = useState<Project[]>(loadProjects);
-  const [selectedId, setSelectedId] = useState<string | null>(loadSelectedId);
+  const [authed, setAuthed] = useState(isAuthed);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('input');
   const [newName, setNewName] = useState('');
   const [showNewInput, setShowNewInput] = useState(false);
   const [dark, setDark] = useState(loadDark);
+  const [loading, setLoading] = useState(true);
 
+  // 다크모드
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem(DARK_KEY, String(dark));
   }, [dark]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  }, [projects]);
+  // 프로젝트 목록 로드
+  const loadProjects = useCallback(async () => {
+    const { data: projectRows } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (!projectRows) { setLoading(false); return; }
+
+    const { data: recordRows } = await supabase
+      .from('tree_records')
+      .select('*')
+      .order('sort_order', { ascending: true });
+
+    const recordsByProject = new Map<string, TreeRecord[]>();
+    for (const r of recordRows ?? []) {
+      const list = recordsByProject.get(r.project_id) ?? [];
+      list.push({
+        id: r.id,
+        diameter: Number(r.diameter),
+        species: r.species as TreeRecord['species'],
+        location: r.location,
+      });
+      recordsByProject.set(r.project_id, list);
+    }
+
+    setProjects(
+      projectRows.map((p) => ({
+        id: p.id,
+        name: p.name,
+        records: recordsByProject.get(p.id) ?? [],
+        createdAt: p.created_at,
+      })),
+    );
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    if (selectedId) localStorage.setItem(SELECTED_KEY, selectedId);
-    else localStorage.removeItem(SELECTED_KEY);
-  }, [selectedId]);
+    if (authed) loadProjects();
+  }, [authed, loadProjects]);
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
 
+  // 레코드 업데이트 (로컬 state + DB 동기화)
   const setRecords = useCallback(
     (updater: TreeRecord[] | ((prev: TreeRecord[]) => TreeRecord[])) => {
       setProjects((prev) =>
-        prev.map((p) =>
-          p.id === selectedId
-            ? { ...p, records: typeof updater === 'function' ? updater(p.records) : updater }
-            : p,
-        ),
+        prev.map((p) => {
+          if (p.id !== selectedId) return p;
+          const newRecords = typeof updater === 'function' ? updater(p.records) : updater;
+          // DB 동기화는 별도 함수에서 처리
+          return { ...p, records: newRecords };
+        }),
       );
     },
     [selectedId],
   );
 
-  const createProject = () => {
+  // 레코드 DB 동기화
+  const syncRecords = useCallback(
+    async (records: TreeRecord[], projectId: string) => {
+      // 기존 레코드 삭제 후 재삽입 (간단한 전략)
+      await supabase.from('tree_records').delete().eq('project_id', projectId);
+      if (records.length > 0) {
+        await supabase.from('tree_records').insert(
+          records.map((r, i) => ({
+            project_id: projectId,
+            diameter: r.diameter,
+            species: r.species,
+            location: r.location,
+            sort_order: i,
+          })),
+        );
+      }
+      // id 재로드 (DB에서 생성된 id 반영)
+      const { data } = await supabase
+        .from('tree_records')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order');
+      if (data) {
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  records: data.map((r) => ({
+                    id: r.id,
+                    diameter: Number(r.diameter),
+                    species: r.species as TreeRecord['species'],
+                    location: r.location,
+                  })),
+                }
+              : p,
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  // 디바운스된 저장
+  useEffect(() => {
+    if (!selected) return;
+    const timer = setTimeout(() => {
+      syncRecords(selected.records, selected.id);
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.records]);
+
+  const createProject = async () => {
     const name = newName.trim();
     if (!name) return;
-    const project: Project = {
-      id: crypto.randomUUID(),
-      name,
-      records: [],
-      createdAt: new Date().toISOString(),
-    };
-    setProjects((prev) => [...prev, project]);
-    setSelectedId(project.id);
-    setNewName('');
-    setShowNewInput(false);
-    setActiveTab('input');
+    const { data } = await supabase
+      .from('projects')
+      .insert({ name })
+      .select()
+      .single();
+    if (data) {
+      const project: Project = {
+        id: data.id,
+        name: data.name,
+        records: [],
+        createdAt: data.created_at,
+      };
+      setProjects((prev) => [...prev, project]);
+      setSelectedId(project.id);
+      setNewName('');
+      setShowNewInput(false);
+      setActiveTab('input');
+    }
   };
 
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
     const target = projects.find((p) => p.id === id);
     if (!target) return;
     if (!confirm(`"${target.name}" 프로젝트를 삭제하시겠습니까?\n(데이터 ${target.records.length}건 포함)`))
       return;
+    await supabase.from('projects').delete().eq('id', id);
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (selectedId === id) setSelectedId(null);
   };
+
+  // PIN 화면
+  if (!authed) {
+    return <PinScreen onSuccess={() => setAuthed(true)} />;
+  }
 
   const darkToggle = (
     <button
@@ -102,6 +192,15 @@ export default function App() {
       {dark ? '☀️' : '🌙'}
     </button>
   );
+
+  // 로딩
+  if (loading) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <p className="text-gray-400 dark:text-gray-500">로딩 중...</p>
+      </div>
+    );
+  }
 
   // 프로젝트 목록 화면
   if (!selected) {
@@ -211,7 +310,6 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
       <div className="max-w-6xl mx-auto p-4">
-        {/* 헤더 */}
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => setSelectedId(null)}
@@ -229,7 +327,6 @@ export default function App() {
           {darkToggle}
         </div>
 
-        {/* 탭 */}
         <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
           <button className={tabClass('input')} onClick={() => setActiveTab('input')}>
             입력
