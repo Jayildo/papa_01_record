@@ -124,20 +124,20 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
   }, [projectId]);
 
   const handleRestore = useCallback(async (event: HistoryEvent) => {
-    if (!confirm('이 시점 이전 상태로 복원하시겠습니까?\n현재 데이터가 이 시점의 데이터로 교체됩니다.')) return;
+    if (!confirm('이 시점의 상태로 복원하시겠습니까?\n현재 데이터가 이 시점의 데이터로 교체됩니다.')) return;
 
     setRestoring(true);
     try {
       // Get the timestamp of this event - we want state BEFORE this event
       const eventTime = event.timestamp;
 
-      // Strategy: get all history entries BEFORE this event's timestamp,
+      // Strategy: get all history entries up to and including this event,
       // then reconstruct each record's latest state
       const { data: allHistory, error } = await supabase
         .from('record_history')
         .select('*')
         .eq('project_id', projectId)
-        .lt('created_at', eventTime)
+        .lte('created_at', eventTime)
         .order('created_at', { ascending: true });
 
       if (error) {
