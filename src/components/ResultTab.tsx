@@ -16,11 +16,14 @@ export default function ResultTab({ records, projectName }: Props) {
   const [exporting, setExporting] = useState(false);
   const [zoom, setZoom] = useState(100);
 
-  const zoomIn = useCallback(() => setZoom((z) => Math.min(z + 10, 200)), []);
-  const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 10, 50)), []);
+  const zoomIn = useCallback(() => setZoom((z) => Math.min(z + 30, 200)), []);
+  const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 30, 50)), []);
   const zoomReset = useCallback(() => setZoom(100), []);
 
-  // 핀치줌
+  // 핀치줌 — zoomRef로 현재 zoom 추적, 리스너 재등록 방지
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -38,7 +41,7 @@ export default function ResultTab({ records, projectName }: Props) {
       if (e.touches.length === 2) {
         e.preventDefault();
         startDist = getDistance(e.touches);
-        startZoom = zoom;
+        startZoom = zoomRef.current;
       }
     };
 
@@ -59,7 +62,7 @@ export default function ResultTab({ records, projectName }: Props) {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
     };
-  }, [zoom]);
+  }, []);
 
   const validRecords = records.filter((r) => r.diameter > 0 && r.location.trim() !== '' && r.species !== '');
 
