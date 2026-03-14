@@ -6,7 +6,10 @@ function getDiameterRange(diameter: number): DiameterRange {
   if (diameter <= 20) return '11~20';
   if (diameter <= 30) return '21~30';
   if (diameter <= 40) return '31~40';
-  return '41~';
+  if (diameter <= 50) return '41~50';
+  if (diameter <= 60) return '51~60';
+  if (diameter <= 70) return '61~70';
+  return '71~';
 }
 
 export interface PivotRow {

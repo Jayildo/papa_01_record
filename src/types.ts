@@ -12,9 +12,9 @@ export interface Project {
   createdAt: string;
 }
 
-export type DiameterRange = '~10' | '11~20' | '21~30' | '31~40' | '41~';
+export type DiameterRange = '~10' | '11~20' | '21~30' | '31~40' | '41~50' | '51~60' | '61~70' | '71~';
 
-export const DIAMETER_RANGES: DiameterRange[] = ['~10', '11~20', '21~30', '31~40', '41~'];
+export const DIAMETER_RANGES: DiameterRange[] = ['~10', '11~20', '21~30', '31~40', '41~50', '51~60', '61~70', '71~'];
 export const SPECIES_LIST: TreeRecord['species'][] = ['낙엽수', '상록수'];
 
 export const DIAMETER_LABELS: Record<DiameterRange, string> = {
@@ -22,5 +22,8 @@ export const DIAMETER_LABELS: Record<DiameterRange, string> = {
   '11~20': 'B11~20',
   '21~30': 'B21~30',
   '31~40': 'B31~40',
-  '41~': 'B41~',
+  '41~50': 'B41~50',
+  '51~60': 'B51~60',
+  '61~70': 'B61~70',
+  '71~': 'B71~',
 };

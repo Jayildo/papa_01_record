@@ -8,7 +8,10 @@ function diameterColor(d: number): string {
   if (d <= 20) return 'bg-sky-100 border-sky-300 dark:bg-sky-900/40 dark:border-sky-700';
   if (d <= 30) return 'bg-amber-100 border-amber-300 dark:bg-amber-900/40 dark:border-amber-700';
   if (d <= 40) return 'bg-orange-100 border-orange-300 dark:bg-orange-900/40 dark:border-orange-700';
-  return 'bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700';
+  if (d <= 50) return 'bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700';
+  if (d <= 60) return 'bg-purple-100 border-purple-300 dark:bg-purple-900/40 dark:border-purple-700';
+  if (d <= 70) return 'bg-indigo-100 border-indigo-300 dark:bg-indigo-900/40 dark:border-indigo-700';
+  return 'bg-red-200 border-red-400 dark:bg-red-900/40 dark:border-red-700';
 }
 
 const SPECIES_OPTIONS: Array<'낙엽수' | '상록수'> = ['낙엽수', '상록수'];
@@ -107,7 +110,10 @@ export default function InputTab({ records, setRecords }: Props) {
     { label: 'B11~20', cls: 'bg-sky-100 border-sky-300 dark:bg-sky-900/40 dark:border-sky-700' },
     { label: 'B21~30', cls: 'bg-amber-100 border-amber-300 dark:bg-amber-900/40 dark:border-amber-700' },
     { label: 'B31~40', cls: 'bg-orange-100 border-orange-300 dark:bg-orange-900/40 dark:border-orange-700' },
-    { label: 'B41~', cls: 'bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700' },
+    { label: 'B41~50', cls: 'bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700' },
+    { label: 'B51~60', cls: 'bg-purple-100 border-purple-300 dark:bg-purple-900/40 dark:border-purple-700' },
+    { label: 'B61~70', cls: 'bg-indigo-100 border-indigo-300 dark:bg-indigo-900/40 dark:border-indigo-700' },
+    { label: 'B71~', cls: 'bg-red-200 border-red-400 dark:bg-red-900/40 dark:border-red-700' },
   ];
 
   return (
