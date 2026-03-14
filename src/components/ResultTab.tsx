@@ -25,18 +25,31 @@ export default function ResultTab({ records, projectName }: Props) {
   }
 
   const result = aggregate(validRecords);
-  const fileName = projectName ? `${projectName}_집계` : '수목_흉고직경_집계';
+  const fileName = projectName ? `${projectName}_집계` : '수목_전정_현황';
 
   const captureTable = async (): Promise<HTMLCanvasElement> => {
     const el = tableRef.current!;
-    // 캡처 시 다크모드 해제하고 흰 배경으로
     const wasDark = document.documentElement.classList.contains('dark');
     if (wasDark) document.documentElement.classList.remove('dark');
+
+    // 캡처 전: 모든 th/td에 인라인 border 강제 적용
+    const cells = el.querySelectorAll('th, td');
+    cells.forEach((cell) => {
+      const el = cell as HTMLElement;
+      el.style.border = '1px solid #d1d5db';
+    });
+
     const canvas = await html2canvas(el, {
       scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true,
     });
+
+    // 캡처 후: 인라인 스타일 제거
+    cells.forEach((cell) => {
+      (cell as HTMLElement).style.border = '';
+    });
+
     if (wasDark) document.documentElement.classList.add('dark');
     return canvas;
   };
@@ -61,7 +74,6 @@ export default function ResultTab({ records, projectName }: Props) {
       const imgData = canvas.toDataURL('image/png');
       const imgW = canvas.width;
       const imgH = canvas.height;
-      // 가로 PDF, 여백 10mm
       const pdf = new jsPDF({
         orientation: imgW > imgH ? 'landscape' : 'portrait',
         unit: 'mm',
@@ -88,41 +100,53 @@ export default function ResultTab({ records, projectName }: Props) {
       );
       const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
 
-      // Web Share API 지원 + 파일 공유 가능 여부 확인
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({ files: [file], title: fileName });
         } catch (e) {
-          // 사용자가 공유를 취소한 경우 (AbortError) 무시
           if (e instanceof Error && e.name !== 'AbortError') {
-            // 공유 실패 시 클립보드 복사 시도
-            await fallbackCopy(canvas, blob);
+            await fallbackCopy(blob);
           }
         }
       } else {
-        // Web Share 미지원 → 클립보드 복사 또는 다운로드
-        await fallbackCopy(canvas, blob);
+        await fallbackCopy(blob);
       }
     } finally {
       setExporting(false);
     }
   };
 
-  const fallbackCopy = async (_canvas: HTMLCanvasElement, blob: Blob) => {
+  const fallbackCopy = async (blob: Blob) => {
     try {
-      // 클립보드에 이미지 복사 시도
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': blob }),
       ]);
       alert('이미지가 클립보드에 복사되었습니다.\n원하는 앱에 붙여넣기 하세요.');
     } catch {
-      // 클립보드도 안 되면 다운로드
       downloadPng();
     }
   };
 
-  const thCls = 'border border-gray-300 dark:border-gray-600 px-2 py-2 text-gray-700 dark:text-gray-300';
-  const tdCls = 'border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-center text-gray-800 dark:text-gray-200';
+  // 인라인 스타일 — html2canvas 호환용
+  const cellStyle: React.CSSProperties = {
+    border: '1px solid #d1d5db',
+    padding: '6px 8px',
+    textAlign: 'center',
+  };
+  const thStyle: React.CSSProperties = {
+    ...cellStyle,
+    backgroundColor: '#f3f4f6',
+    fontWeight: 600,
+    color: '#374151',
+  };
+  const thSubStyle: React.CSSProperties = {
+    ...cellStyle,
+    backgroundColor: '#f9fafb',
+    fontWeight: 600,
+    color: '#374151',
+    fontSize: '12px',
+    whiteSpace: 'nowrap',
+  };
 
   return (
     <div>
@@ -156,85 +180,90 @@ export default function ResultTab({ records, projectName }: Props) {
 
       {/* 캡처 대상 영역 */}
       <div className="overflow-x-auto -mx-4 px-4 pb-4">
-        <div ref={tableRef} className="inline-block min-w-full bg-white dark:bg-gray-900 p-2">
-          <div className="text-center mb-3">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+        <div ref={tableRef} style={{ display: 'inline-block', minWidth: '100%', backgroundColor: '#fff', padding: '12px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
               수목 전정 현황
-            </h2>
+            </div>
             {projectName && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{projectName}</p>
+              <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '2px' }}>{projectName}</div>
             )}
           </div>
-          <table className="border-collapse text-sm min-w-full">
+          <table style={{ borderCollapse: 'collapse', fontSize: '13px', width: '100%' }}>
             <thead>
-              <tr className="bg-gray-100 dark:bg-gray-800">
-                <th rowSpan={2} className={`${thCls} min-w-20`}>위치</th>
+              <tr>
+                <th rowSpan={2} style={{ ...thStyle, minWidth: '70px' }}>위치</th>
                 {SPECIES_LIST.map((sp) => (
                   <th
                     key={sp}
                     colSpan={DIAMETER_RANGES.length + 1}
-                    className={`${thCls} text-center`}
+                    style={thStyle}
                   >
                     {sp}
                   </th>
                 ))}
-                <th rowSpan={2} className={thCls}>합계</th>
+                <th rowSpan={2} style={thStyle}>합계</th>
               </tr>
-              <tr className="bg-gray-50 dark:bg-gray-800/60">
+              <tr>
                 {SPECIES_LIST.map((sp) => (
                   <Fragment key={sp}>
                     {DIAMETER_RANGES.map((dr) => (
-                      <th key={`${sp}-${dr}`} className={`${thCls} whitespace-nowrap text-center text-xs`}>
+                      <th key={`${sp}-${dr}`} style={thSubStyle}>
                         {DIAMETER_LABELS[dr]}
                       </th>
                     ))}
-                    <th key={`${sp}-sub`} className={`${thCls} text-center font-bold`}>소계</th>
+                    <th key={`${sp}-sub`} style={{ ...thSubStyle, fontWeight: 700 }}>소계</th>
                   </Fragment>
                 ))}
               </tr>
             </thead>
             <tbody>
               {result.rows.map((row) => (
-                <tr key={row.location} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                  <td className={`${tdCls} font-medium text-left`}>{row.location}</td>
+                <tr key={row.location}>
+                  <td style={{ ...cellStyle, fontWeight: 500, textAlign: 'left', color: '#1f2937' }}>
+                    {row.location}
+                  </td>
                   {SPECIES_LIST.map((sp) => (
                     <Fragment key={sp}>
                       {DIAMETER_RANGES.map((dr) => (
-                        <td key={`${row.location}-${sp}-${dr}`} className={tdCls}>
+                        <td key={`${row.location}-${sp}-${dr}`} style={{ ...cellStyle, color: '#1f2937' }}>
                           {row.counts[sp][dr] || ''}
                         </td>
                       ))}
                       <td
                         key={`${row.location}-${sp}-sub`}
-                        className={`${tdCls} font-bold bg-gray-50 dark:bg-gray-800/40`}
+                        style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#f9fafb', color: '#1f2937' }}
                       >
                         {row.speciesSubtotals[sp] || ''}
                       </td>
                     </Fragment>
                   ))}
-                  <td className={`${tdCls} font-bold bg-blue-50 dark:bg-blue-900/20`}>
+                  <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#eff6ff', color: '#1f2937' }}>
                     {row.total}
                   </td>
                 </tr>
               ))}
-              <tr className="bg-yellow-50 dark:bg-yellow-900/20 font-bold">
-                <td className={`${tdCls} text-left`}>소계</td>
+              {/* 소계 행 */}
+              <tr>
+                <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fefce8', textAlign: 'left', color: '#1f2937' }}>
+                  소계
+                </td>
                 {SPECIES_LIST.map((sp) => (
                   <Fragment key={sp}>
                     {DIAMETER_RANGES.map((dr) => (
-                      <td key={`total-${sp}-${dr}`} className={tdCls}>
+                      <td key={`total-${sp}-${dr}`} style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fefce8', color: '#1f2937' }}>
                         {result.columnTotals[sp][dr] || ''}
                       </td>
                     ))}
                     <td
                       key={`total-${sp}-sub`}
-                      className={`${tdCls} bg-yellow-100 dark:bg-yellow-900/30`}
+                      style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fef9c3', color: '#1f2937' }}
                     >
                       {result.speciesTotals[sp]}
                     </td>
                   </Fragment>
                 ))}
-                <td className={`${tdCls} bg-blue-100 dark:bg-blue-900/30`}>
+                <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#dbeafe', color: '#1f2937' }}>
                   {result.grandTotal}
                 </td>
               </tr>
