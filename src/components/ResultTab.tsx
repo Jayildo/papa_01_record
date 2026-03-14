@@ -47,7 +47,8 @@ export default function ResultTab({ records, projectName }: Props) {
         e.preventDefault();
         const dist = getDistance(e.touches);
         const scale = dist / startDist;
-        const newZoom = Math.round(Math.min(200, Math.max(50, startZoom * scale)));
+        const dampedScale = 1 + (scale - 1) * 0.4;
+        const newZoom = Math.round(Math.min(200, Math.max(50, startZoom * dampedScale)));
         setZoom(newZoom);
       }
     };

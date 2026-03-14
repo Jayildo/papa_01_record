@@ -1,6 +1,8 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import type { TreeRecord } from '../types';
 import LocationComboBox from './LocationComboBox';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 
 function diameterColor(d: number): string {
   if (!d || d <= 0) return '';
@@ -54,11 +56,14 @@ function SpeciesToggle({
 interface Props {
   records: TreeRecord[];
   setRecords: React.Dispatch<React.SetStateAction<TreeRecord[]>>;
+  projectName?: string;
 }
 
-export default function InputTab({ records, setRecords }: Props) {
+export default function InputTab({ records, setRecords, projectName }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
   const shouldScroll = useRef(false);
+  const [exporting, setExporting] = useState(false);
 
   const locationOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -116,8 +121,195 @@ export default function InputTab({ records, setRecords }: Props) {
     { label: 'B71~', cls: 'bg-red-200 border-red-400 dark:bg-red-900/40 dark:border-red-700' },
   ];
 
+  const fileName = projectName ? `${projectName}_입력데이터` : '수목_입력데이터';
+
+  const captureTable = async (): Promise<HTMLCanvasElement> => {
+    const el = captureRef.current!;
+    const wasDark = document.documentElement.classList.contains('dark');
+    if (wasDark) document.documentElement.classList.remove('dark');
+
+    el.style.display = 'block';
+
+    const cells = el.querySelectorAll('th, td');
+    cells.forEach((cell) => {
+      (cell as HTMLElement).style.border = '1px solid #d1d5db';
+    });
+
+    const canvas = await html2canvas(el, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+    });
+
+    cells.forEach((cell) => {
+      (cell as HTMLElement).style.border = '';
+    });
+    el.style.display = 'none';
+
+    if (wasDark) document.documentElement.classList.add('dark');
+    return canvas;
+  };
+
+  const downloadPng = async () => {
+    setExporting(true);
+    try {
+      const canvas = await captureTable();
+      const link = document.createElement('a');
+      link.download = `${fileName}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setExporting(true);
+    try {
+      const canvas = await captureTable();
+      const imgData = canvas.toDataURL('image/png');
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+      const pdf = new jsPDF({
+        orientation: imgW > imgH ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+      const pageW = pdf.internal.pageSize.getWidth() - 20;
+      const pageH = pdf.internal.pageSize.getHeight() - 20;
+      const ratio = Math.min(pageW / imgW, pageH / imgH);
+      const w = imgW * ratio;
+      const h = imgH * ratio;
+      pdf.addImage(imgData, 'PNG', 10, 10, w, h);
+      pdf.save(`${fileName}.pdf`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const sharePng = async () => {
+    setExporting(true);
+    try {
+      const canvas = await captureTable();
+      const blob = await new Promise<Blob>((resolve) =>
+        canvas.toBlob((b) => resolve(b!), 'image/png'),
+      );
+      const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
+
+      if (typeof navigator.share === 'function') {
+        const shareData: ShareData = { files: [file], title: fileName };
+        if (navigator.canShare?.(shareData)) {
+          try {
+            await navigator.share(shareData);
+            return;
+          } catch (e) {
+            if (e instanceof Error && e.name === 'AbortError') return;
+          }
+        }
+        try {
+          await navigator.share({ title: fileName, text: '수목 입력 데이터' });
+          return;
+        } catch {
+          // 무시
+        }
+      }
+
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob }),
+        ]);
+        alert('이미지가 클립보드에 복사되었습니다.\n원하는 앱에 붙여넣기 하세요.');
+        return;
+      } catch {
+        // 무시
+      }
+
+      const link = document.createElement('a');
+      link.download = `${fileName}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // 캡처 전용 테이블 인라인 스타일
+  const cellStyle: React.CSSProperties = {
+    border: '1px solid #d1d5db',
+    padding: '6px 8px',
+    textAlign: 'center',
+  };
+  const thStyle: React.CSSProperties = {
+    ...cellStyle,
+    backgroundColor: '#f3f4f6',
+    fontWeight: 600,
+    color: '#374151',
+  };
+
   return (
     <div>
+      {/* 내보내기 버튼 */}
+      {records.length > 0 && (
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={downloadPng}
+            disabled={exporting}
+            className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
+              cursor-pointer active:bg-emerald-700 disabled:opacity-50"
+          >
+            PNG
+          </button>
+          <button
+            onClick={downloadPdf}
+            disabled={exporting}
+            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium
+              cursor-pointer active:bg-blue-700 disabled:opacity-50"
+          >
+            PDF
+          </button>
+          <button
+            onClick={sharePng}
+            disabled={exporting}
+            className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium
+              cursor-pointer active:bg-violet-700 disabled:opacity-50"
+          >
+            공유
+          </button>
+        </div>
+      )}
+
+      {/* 캡처 전용 숨김 테이블 */}
+      <div ref={captureRef} style={{ display: 'none', backgroundColor: '#fff', padding: '12px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+            수목 입력 데이터
+          </div>
+          {projectName && (
+            <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '2px' }}>{projectName}</div>
+          )}
+        </div>
+        <table style={{ borderCollapse: 'collapse', fontSize: '13px', width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ ...thStyle, minWidth: '50px' }}>순번</th>
+              <th style={{ ...thStyle, minWidth: '80px' }}>흉고직경(cm)</th>
+              <th style={{ ...thStyle, minWidth: '80px' }}>수종</th>
+              <th style={{ ...thStyle, minWidth: '120px' }}>위치</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((r, idx) => (
+              <tr key={r.id}>
+                <td style={{ ...cellStyle, color: '#1f2937' }}>{idx + 1}</td>
+                <td style={{ ...cellStyle, color: '#1f2937' }}>{r.diameter || ''}</td>
+                <td style={{ ...cellStyle, color: '#1f2937' }}>{r.species}</td>
+                <td style={{ ...cellStyle, color: '#1f2937', textAlign: 'left' }}>{r.location}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {/* 데스크톱: 상단 버튼 */}
       <div className="mb-4 hidden sm:flex sm:items-center gap-3">
         <button

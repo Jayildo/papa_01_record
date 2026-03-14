@@ -313,7 +313,7 @@ export default function App() {
         </div>
 
         {activeTab === 'input' ? (
-          <InputTab records={selected.records} setRecords={setRecords} />
+          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} />
         ) : (
           <ResultTab records={selected.records} projectName={selected.name} />
         )}
