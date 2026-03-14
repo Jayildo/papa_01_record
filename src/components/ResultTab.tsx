@@ -126,7 +126,7 @@ export default function ResultTab({ records, projectName }: Props) {
       const imgW = canvas.width;
       const imgH = canvas.height;
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4',
       });
