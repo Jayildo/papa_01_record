@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useRef, useState, useCallback } from 'react';
 import type { TreeRecord } from '../types';
 import { DIAMETER_RANGES, SPECIES_LIST, DIAMETER_LABELS } from '../types';
 import { aggregate } from '../utils/aggregate';
@@ -13,6 +13,11 @@ interface Props {
 export default function ResultTab({ records, projectName }: Props) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [zoom, setZoom] = useState(100);
+
+  const zoomIn = useCallback(() => setZoom((z) => Math.min(z + 10, 200)), []);
+  const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 10, 50)), []);
+  const zoomReset = useCallback(() => setZoom(100), []);
 
   const validRecords = records.filter((r) => r.diameter > 0 && r.location.trim() !== '' && r.species !== '');
 
@@ -150,37 +155,75 @@ export default function ResultTab({ records, projectName }: Props) {
 
   return (
     <div>
-      {/* 내보내기 버튼 */}
-      <div className="flex gap-2 mb-3 flex-wrap">
+      {/* 툴바: 내보내기 + 줌 */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <button
           onClick={downloadPng}
           disabled={exporting}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
+          className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
             cursor-pointer active:bg-emerald-700 disabled:opacity-50"
         >
-          PNG 저장
+          PNG
         </button>
         <button
           onClick={downloadPdf}
           disabled={exporting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium
+          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium
             cursor-pointer active:bg-blue-700 disabled:opacity-50"
         >
-          PDF 저장
+          PDF
         </button>
         <button
           onClick={sharePng}
           disabled={exporting}
-          className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium
+          className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium
             cursor-pointer active:bg-violet-700 disabled:opacity-50"
         >
           공유
         </button>
+
+        <div className="flex items-center gap-1 ml-auto
+          bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <button
+            onClick={zoomOut}
+            className="w-8 h-8 flex items-center justify-center text-lg cursor-pointer
+              text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700
+              rounded-l-lg"
+          >
+            −
+          </button>
+          <button
+            onClick={zoomReset}
+            className="px-2 h-8 text-xs font-medium cursor-pointer
+              text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700
+              min-w-[3rem] text-center"
+          >
+            {zoom}%
+          </button>
+          <button
+            onClick={zoomIn}
+            className="w-8 h-8 flex items-center justify-center text-lg cursor-pointer
+              text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700
+              rounded-r-lg"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {/* 캡처 대상 영역 */}
-      <div className="overflow-x-auto -mx-4 px-4 pb-4">
-        <div ref={tableRef} style={{ display: 'inline-block', minWidth: '100%', backgroundColor: '#fff', padding: '12px' }}>
+      <div className="overflow-auto -mx-4 px-4 pb-4">
+        <div
+          ref={tableRef}
+          style={{
+            display: 'inline-block',
+            minWidth: '100%',
+            backgroundColor: '#fff',
+            padding: '12px',
+            transform: `scale(${zoom / 100})`,
+            transformOrigin: 'top left',
+          }}
+        >
           <div style={{ textAlign: 'center', marginBottom: '12px' }}>
             <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
               수목 전정 현황
