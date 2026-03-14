@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import type { TreeRecord } from '../types';
 import LocationComboBox from './LocationComboBox';
 
@@ -11,16 +11,8 @@ function diameterColor(d: number): string {
   return 'bg-rose-100 border-rose-300 dark:bg-rose-900/40 dark:border-rose-700';
 }
 
-function diameterLabel(d: number): string {
-  if (!d || d <= 0) return '';
-  if (d <= 10) return '~B10';
-  if (d <= 20) return 'B11~20';
-  if (d <= 30) return 'B21~30';
-  if (d <= 40) return 'B31~40';
-  return 'B41~';
-}
-
 const SPECIES_OPTIONS: Array<'낙엽수' | '상록수'> = ['낙엽수', '상록수'];
+const SPECIES_SHORT: Record<string, string> = { '낙엽수': '낙엽', '상록수': '상록' };
 
 function SpeciesToggle({
   value,
@@ -31,30 +23,27 @@ function SpeciesToggle({
 }) {
   const hasError = value === '';
   return (
-    <div>
-      <div className={`inline-flex rounded-lg overflow-hidden border ${
-        hasError
-          ? 'border-red-400 ring-1 ring-red-300 dark:border-red-500 dark:ring-red-500/30'
-          : 'border-gray-300 dark:border-gray-600'
-      }`}>
-        {SPECIES_OPTIONS.map((sp) => (
-          <button
-            key={sp}
-            type="button"
-            onClick={() => onChange(sp)}
-            className={`px-4 py-2 text-sm cursor-pointer transition-colors font-medium ${
-              value === sp
-                ? sp === '낙엽수'
-                  ? 'bg-green-600 text-white dark:bg-green-500'
-                  : 'bg-teal-600 text-white dark:bg-teal-500'
-                : 'bg-white text-gray-500 active:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:active:bg-gray-700'
-            }`}
-          >
-            {sp}
-          </button>
-        ))}
-      </div>
-      {hasError && <p className="text-red-500 dark:text-red-400 text-xs mt-1">수종을 선택하세요</p>}
+    <div className={`inline-flex rounded-lg overflow-hidden border ${
+      hasError
+        ? 'border-red-400 ring-1 ring-red-300 dark:border-red-500 dark:ring-red-500/30'
+        : 'border-gray-300 dark:border-gray-600'
+    }`}>
+      {SPECIES_OPTIONS.map((sp) => (
+        <button
+          key={sp}
+          type="button"
+          onClick={() => onChange(sp)}
+          className={`px-3 py-1.5 text-sm cursor-pointer transition-colors font-medium ${
+            value === sp
+              ? sp === '낙엽수'
+                ? 'bg-green-600 text-white dark:bg-green-500'
+                : 'bg-teal-600 text-white dark:bg-teal-500'
+              : 'bg-white text-gray-500 active:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:active:bg-gray-700'
+          }`}
+        >
+          {SPECIES_SHORT[sp]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -65,6 +54,9 @@ interface Props {
 }
 
 export default function InputTab({ records, setRecords }: Props) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const shouldScroll = useRef(false);
+
   const locationOptions = useMemo(() => {
     const seen = new Set<string>();
     const result: string[] = [];
@@ -81,6 +73,7 @@ export default function InputTab({ records, setRecords }: Props) {
   const addRow = () => {
     const nextId = records.length > 0 ? Math.max(...records.map((r) => r.id)) + 1 : 1;
     const lastRecord = records[records.length - 1];
+    shouldScroll.current = true;
     setRecords([
       ...records,
       {
@@ -91,6 +84,15 @@ export default function InputTab({ records, setRecords }: Props) {
       },
     ]);
   };
+
+  useEffect(() => {
+    if (shouldScroll.current) {
+      shouldScroll.current = false;
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }, [records.length]);
 
   const removeRow = (id: number) => {
     setRecords(records.filter((r) => r.id !== id));
@@ -126,8 +128,8 @@ export default function InputTab({ records, setRecords }: Props) {
         </div>
       </div>
 
-      {/* 모바일: 카드 레이아웃 */}
-      <div className="flex flex-col gap-3 pb-32 sm:hidden">
+      {/* 모바일: 카드 레이아웃 - 한 줄 컴팩트 */}
+      <div className="flex flex-col gap-2 pb-28 sm:hidden">
         {records.length === 0 && (
           <p className="text-gray-400 dark:text-gray-500 py-12 text-center">
             데이터가 없습니다.<br />하단의 "행 추가" 버튼을 눌러주세요.
@@ -136,66 +138,49 @@ export default function InputTab({ records, setRecords }: Props) {
         {records.map((r, idx) => (
           <div
             key={r.id}
-            className={`border rounded-xl p-4 shadow-sm ${
+            className={`border rounded-lg px-2.5 py-2 ${
               diameterColor(r.diameter) || 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
             }`}
           >
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-xs font-bold text-gray-400 dark:text-gray-500">
-                #{idx + 1}
-                {r.diameter > 0 && (
-                  <span className="ml-2 text-gray-600 dark:text-gray-300">{diameterLabel(r.diameter)}</span>
-                )}
+            {/* 한 줄: 순번 | 직경 | 수종 | 위치 | 삭제 */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-gray-400 dark:text-gray-500 w-6 text-center shrink-0">
+                {idx + 1}
               </span>
-              <button
-                onClick={() => removeRow(r.id)}
-                className="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-1
-                  rounded-lg active:bg-red-50 dark:active:bg-red-900/20"
-              >
-                삭제
-              </button>
-            </div>
-
-            {/* 흉고직경 + 수종 한 줄 */}
-            <div className="flex items-end gap-3 mb-3">
-              <div className="flex-1">
-                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">흉고직경(cm)</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  value={r.diameter || ''}
-                  onChange={(e) => updateRecord(r.id, 'diameter', Number(e.target.value))}
-                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-base
-                    bg-white/70 dark:bg-gray-700/70 text-gray-900 dark:text-gray-100
-                    placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">수종</label>
-                <SpeciesToggle
-                  value={r.species}
-                  onChange={(v) => updateRecord(r.id, 'species', v)}
-                />
-              </div>
-            </div>
-
-            {/* 위치 */}
-            <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">위치</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                value={r.diameter || ''}
+                onChange={(e) => updateRecord(r.id, 'diameter', Number(e.target.value))}
+                className="w-14 px-1.5 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-center
+                  bg-white/70 dark:bg-gray-700/70 text-gray-900 dark:text-gray-100
+                  placeholder:text-gray-400 dark:placeholder:text-gray-500 shrink-0"
+                placeholder="B"
+              />
+              <SpeciesToggle
+                value={r.species}
+                onChange={(v) => updateRecord(r.id, 'species', v)}
+              />
               <LocationComboBox
                 value={r.location}
                 options={locationOptions}
                 onChange={(v) => updateRecord(r.id, 'location', v)}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-base
+                className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm
                   bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                   placeholder:text-gray-400 dark:placeholder:text-gray-500"
-                placeholder="위치 입력"
+                placeholder="위치"
               />
+              <button
+                onClick={() => removeRow(r.id)}
+                className="text-red-400 active:text-red-600 cursor-pointer text-sm px-1 shrink-0"
+              >
+                ✕
+              </button>
             </div>
           </div>
         ))}
+        <div ref={bottomRef} />
       </div>
 
       {/* 데스크톱: 테이블 레이아웃 */}
