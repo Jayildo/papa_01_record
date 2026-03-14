@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, TreeRecord, SyncStatus } from './types';
 import { supabase } from './lib/supabase';
 import { syncRecords, flushOfflineQueue } from './utils/syncEngine';
@@ -29,6 +29,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const [showHistory, setShowHistory] = useState(false);
+  // dirty 플래그: 사용자가 실제로 데이터를 수정했을 때만 true
+  const dirtyRef = useRef(false);
 
   // 다크모드
   useEffect(() => {
@@ -85,11 +87,11 @@ export default function App() {
   // 레코드 업데이트 (로컬 state + DB 동기화)
   const setRecords = useCallback(
     (updater: TreeRecord[] | ((prev: TreeRecord[]) => TreeRecord[])) => {
+      dirtyRef.current = true; // 사용자가 수정함 → sync 허용
       setProjects((prev) =>
         prev.map((p) => {
           if (p.id !== selectedId) return p;
           const newRecords = typeof updater === 'function' ? updater(p.records) : updater;
-          // DB 동기화는 별도 함수에서 처리
           return { ...p, records: newRecords };
         }),
       );
@@ -104,14 +106,21 @@ export default function App() {
       const result = await syncRecords(records, projectId);
       setSyncStatus(result.status);
 
-      // Update local state with real DB ids (for newly inserted records)
+      // 새로 INSERT된 레코드가 있을 때만 ID 업데이트 (무한 루프 방지)
       if (result.updatedRecords) {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId ? { ...p, records: result.updatedRecords! } : p,
-          ),
+        const hasNewIds = result.updatedRecords.some(
+          (r, i) => r.id !== records[i]?.id,
         );
+        if (hasNewIds) {
+          dirtyRef.current = false; // ID 업데이트는 사용자 수정이 아님
+          setProjects((prev) =>
+            prev.map((p) =>
+              p.id === projectId ? { ...p, records: result.updatedRecords! } : p,
+            ),
+          );
+        }
       }
+      dirtyRef.current = false;
     },
     [],
   );
@@ -119,20 +128,19 @@ export default function App() {
   const handleHistoryRestore = useCallback(
     (restoredRecords: TreeRecord[]) => {
       if (!selectedId) return;
+      dirtyRef.current = true; // 복원도 변경이므로 sync 허용
       setProjects((prev) =>
         prev.map((p) =>
           p.id === selectedId ? { ...p, records: restoredRecords } : p,
         ),
       );
-      // Trigger sync with restored data
-      // The debounced effect will handle this automatically
     },
     [selectedId],
   );
 
-  // 디바운스된 저장
+  // 디바운스된 저장 — dirty일 때만 (DB에서 방금 로드한 데이터는 sync 안 함)
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || !dirtyRef.current) return;
     const timer = setTimeout(() => {
       doSync(selected.records, selected.id);
     }, 1500);
