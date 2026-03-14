@@ -1,7 +1,6 @@
 import { useState } from 'react';
 
-const PIN = import.meta.env.VITE_APP_PIN || '';
-if (!PIN) throw new Error('Missing environment variable: VITE_APP_PIN');
+const PIN = import.meta.env.VITE_APP_PIN || '1124';
 const SESSION_KEY = 'papa_01_authed';
 
 export function isAuthed(): boolean {
