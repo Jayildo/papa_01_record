@@ -1,0 +1,26 @@
+export interface TreeRecord {
+  id: number;
+  diameter: number;
+  species: '낙엽수' | '상록수' | '';
+  location: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  records: TreeRecord[];
+  createdAt: string;
+}
+
+export type DiameterRange = '~10' | '11~20' | '21~30' | '31~40' | '41~';
+
+export const DIAMETER_RANGES: DiameterRange[] = ['~10', '11~20', '21~30', '31~40', '41~'];
+export const SPECIES_LIST: TreeRecord['species'][] = ['낙엽수', '상록수'];
+
+export const DIAMETER_LABELS: Record<DiameterRange, string> = {
+  '~10': '~B10',
+  '11~20': 'B11~20',
+  '21~30': 'B21~30',
+  '31~40': 'B31~40',
+  '41~': 'B41~',
+};
