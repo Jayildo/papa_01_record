@@ -92,20 +92,21 @@ export default function ResultTab({ records, projectName }: Props) {
       (cell as HTMLElement).style.border = '1px solid #d1d5db';
     });
 
-    const canvas = await html2canvas(el, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-    });
-
-    // 캡처 후: 원래 상태 복원
-    cells.forEach((cell) => {
-      (cell as HTMLElement).style.border = '';
-    });
-    el.style.transform = `scale(${prevZoom / 100})`;
-
-    if (wasDark) document.documentElement.classList.add('dark');
-    return canvas;
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+      });
+      return canvas;
+    } finally {
+      // 캡처 후: 항상 원래 상태 복원
+      cells.forEach((cell) => {
+        (cell as HTMLElement).style.border = '';
+      });
+      el.style.transform = `scale(${prevZoom / 100})`;
+      if (wasDark) document.documentElement.classList.add('dark');
+    }
   };
 
   const downloadPng = async () => {
@@ -123,23 +124,24 @@ export default function ResultTab({ records, projectName }: Props) {
 
   const downloadPdf = async () => {
     setExporting(true);
+    const el = tableRef.current!;
+    const wasDark = document.documentElement.classList.contains('dark');
+    if (wasDark) document.documentElement.classList.remove('dark');
+
+    const prevZoom = zoom;
+    el.style.transform = 'scale(1)';
+
+    const cells = el.querySelectorAll('th, td');
+    cells.forEach((cell) => {
+      (cell as HTMLElement).style.border = '1px solid #d1d5db';
+    });
+
+    const allRows = el.querySelectorAll('tbody tr');
+    const titleEl = el.querySelector(':scope > div') as HTMLElement; // 제목 영역
+
     try {
-      const el = tableRef.current!;
-      const wasDark = document.documentElement.classList.contains('dark');
-      if (wasDark) document.documentElement.classList.remove('dark');
-
-      const prevZoom = zoom;
-      el.style.transform = 'scale(1)';
-
-      const cells = el.querySelectorAll('th, td');
-      cells.forEach((cell) => {
-        (cell as HTMLElement).style.border = '1px solid #d1d5db';
-      });
-
       const ROWS_PER_PAGE = 50;
-      const allRows = el.querySelectorAll('tbody tr');
       const totalPages = Math.max(1, Math.ceil(allRows.length / ROWS_PER_PAGE));
-      const titleEl = el.querySelector(':scope > div') as HTMLElement; // 제목 영역
 
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth() - 20;
@@ -168,15 +170,14 @@ export default function ResultTab({ records, projectName }: Props) {
         );
       }
 
-      // 복원
+      pdf.save(`${fileName}.pdf`);
+    } finally {
+      // 항상 복원
       allRows.forEach((tr) => { (tr as HTMLElement).style.display = ''; });
       titleEl.style.display = '';
       cells.forEach((cell) => { (cell as HTMLElement).style.border = ''; });
       el.style.transform = `scale(${prevZoom / 100})`;
       if (wasDark) document.documentElement.classList.add('dark');
-
-      pdf.save(`${fileName}.pdf`);
-    } finally {
       setExporting(false);
     }
   };
@@ -259,6 +260,7 @@ export default function ResultTab({ records, projectName }: Props) {
         <button
           onClick={downloadPng}
           disabled={exporting}
+          aria-label="PNG 다운로드"
           className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
             cursor-pointer active:bg-emerald-700 disabled:opacity-50"
         >
@@ -267,6 +269,7 @@ export default function ResultTab({ records, projectName }: Props) {
         <button
           onClick={downloadPdf}
           disabled={exporting}
+          aria-label="PDF 다운로드"
           className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium
             cursor-pointer active:bg-blue-700 disabled:opacity-50"
         >
@@ -275,6 +278,7 @@ export default function ResultTab({ records, projectName }: Props) {
         <button
           onClick={sharePng}
           disabled={exporting}
+          aria-label="이미지 공유"
           className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium
             cursor-pointer active:bg-violet-700 disabled:opacity-50"
         >
@@ -285,6 +289,7 @@ export default function ResultTab({ records, projectName }: Props) {
           bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <button
             onClick={zoomOut}
+            aria-label="축소"
             className="w-8 h-8 flex items-center justify-center text-lg cursor-pointer
               text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700
               rounded-l-lg"
@@ -293,6 +298,7 @@ export default function ResultTab({ records, projectName }: Props) {
           </button>
           <button
             onClick={zoomReset}
+            aria-label="줌 리셋"
             className="px-2 h-8 text-xs font-medium cursor-pointer
               text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700
               min-w-[3rem] text-center"
@@ -301,6 +307,7 @@ export default function ResultTab({ records, projectName }: Props) {
           </button>
           <button
             onClick={zoomIn}
+            aria-label="확대"
             className="w-8 h-8 flex items-center justify-center text-lg cursor-pointer
               text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700
               rounded-r-lg"

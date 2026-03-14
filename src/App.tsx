@@ -33,17 +33,19 @@ export default function App() {
 
   // 프로젝트 목록 로드
   const loadProjects = useCallback(async () => {
-    const { data: projectRows } = await supabase
+    const { data: projectRows, error: projectsError } = await supabase
       .from('projects')
       .select('*')
       .order('created_at', { ascending: true });
 
+    if (projectsError) console.error('loadProjects:', projectsError);
     if (!projectRows) { setLoading(false); return; }
 
-    const { data: recordRows } = await supabase
+    const { data: recordRows, error: recordsError } = await supabase
       .from('tree_records')
       .select('*')
       .order('sort_order', { ascending: true });
+    if (recordsError) console.error('loadProjects records:', recordsError);
 
     const recordsByProject = new Map<string, TreeRecord[]>();
     for (const r of recordRows ?? []) {
@@ -92,9 +94,10 @@ export default function App() {
   // 레코드 DB 동기화 (로컬 state는 건드리지 않음)
   const syncRecords = useCallback(
     async (records: TreeRecord[], projectId: string) => {
-      await supabase.from('tree_records').delete().eq('project_id', projectId);
+      const { error: deleteError } = await supabase.from('tree_records').delete().eq('project_id', projectId);
+      if (deleteError) console.error('syncRecords delete:', deleteError);
       if (records.length > 0) {
-        await supabase.from('tree_records').insert(
+        const { error: insertError } = await supabase.from('tree_records').insert(
           records.map((r, i) => ({
             project_id: projectId,
             diameter: r.diameter,
@@ -103,6 +106,7 @@ export default function App() {
             sort_order: i,
           })),
         );
+        if (insertError) console.error('syncRecords insert:', insertError);
       }
     },
     [],
@@ -121,11 +125,12 @@ export default function App() {
   const createProject = async () => {
     const name = newName.trim();
     if (!name) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('projects')
       .insert({ name })
       .select()
       .single();
+    if (error) console.error('createProject:', error);
     if (data) {
       const project: Project = {
         id: data.id,
@@ -146,7 +151,8 @@ export default function App() {
     if (!target) return;
     if (!confirm(`"${target.name}" 프로젝트를 삭제하시겠습니까?\n(데이터 ${target.records.length}건 포함)`))
       return;
-    await supabase.from('projects').delete().eq('id', id);
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) console.error('deleteProject:', error);
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (selectedId === id) setSelectedId(null);
   };

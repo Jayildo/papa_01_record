@@ -79,7 +79,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
   }, [records]);
 
   const addRow = () => {
-    const nextId = records.length > 0 ? Math.max(...records.map((r) => r.id)) + 1 : 1;
+    const nextId = records.reduce((max, r) => Math.max(max, r.id), 0) + 1;
     const lastRecord = records[records.length - 1];
     shouldScroll.current = true;
     setRecords([
@@ -136,20 +136,22 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
       (cell as HTMLElement).style.border = '1px solid #d1d5db';
     });
 
-    const canvas = await html2canvas(el, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-    });
-
-    cells.forEach((cell) => {
-      (cell as HTMLElement).style.border = '';
-    });
-    el.style.width = '';
-    el.style.display = 'none';
-
-    if (wasDark) document.documentElement.classList.add('dark');
-    return canvas;
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+      });
+      return canvas;
+    } finally {
+      // 항상 복원
+      cells.forEach((cell) => {
+        (cell as HTMLElement).style.border = '';
+      });
+      el.style.width = '';
+      el.style.display = 'none';
+      if (wasDark) document.documentElement.classList.add('dark');
+    }
   };
 
   const downloadPng = async () => {
@@ -167,23 +169,24 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
 
   const downloadPdf = async () => {
     setExporting(true);
+    const el = captureRef.current!;
+    const wasDark = document.documentElement.classList.contains('dark');
+    if (wasDark) document.documentElement.classList.remove('dark');
+
+    el.style.display = 'block';
+    el.style.width = '800px';
+
+    const cells = el.querySelectorAll('th, td');
+    cells.forEach((cell) => {
+      (cell as HTMLElement).style.border = '1px solid #d1d5db';
+    });
+
+    const allRows = el.querySelectorAll('tbody tr');
+    const titleEl = el.querySelector(':scope > div') as HTMLElement; // 제목 영역
+
     try {
-      const el = captureRef.current!;
-      const wasDark = document.documentElement.classList.contains('dark');
-      if (wasDark) document.documentElement.classList.remove('dark');
-
-      el.style.display = 'block';
-      el.style.width = '800px';
-
-      const cells = el.querySelectorAll('th, td');
-      cells.forEach((cell) => {
-        (cell as HTMLElement).style.border = '1px solid #d1d5db';
-      });
-
       const ROWS_PER_PAGE = 50;
-      const allRows = el.querySelectorAll('tbody tr');
       const totalPages = Math.max(1, Math.ceil(allRows.length / ROWS_PER_PAGE));
-      const titleEl = el.querySelector(':scope > div') as HTMLElement; // 제목 영역
 
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth() - 20;
@@ -214,16 +217,15 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
         );
       }
 
-      // 복원
+      pdf.save(`${fileName}.pdf`);
+    } finally {
+      // 항상 복원
       allRows.forEach((tr) => { (tr as HTMLElement).style.display = ''; });
       titleEl.style.display = '';
       cells.forEach((cell) => { (cell as HTMLElement).style.border = ''; });
       el.style.width = '';
       el.style.display = 'none';
       if (wasDark) document.documentElement.classList.add('dark');
-
-      pdf.save(`${fileName}.pdf`);
-    } finally {
       setExporting(false);
     }
   };
@@ -297,6 +299,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
           <button
             onClick={downloadPng}
             disabled={exporting}
+            aria-label="PNG 다운로드"
             className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium
               cursor-pointer active:bg-emerald-700 disabled:opacity-50"
           >
@@ -305,6 +308,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
           <button
             onClick={downloadPdf}
             disabled={exporting}
+            aria-label="PDF 다운로드"
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium
               cursor-pointer active:bg-blue-700 disabled:opacity-50"
           >
@@ -313,6 +317,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
           <button
             onClick={sharePng}
             disabled={exporting}
+            aria-label="이미지 공유"
             className="px-3 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium
               cursor-pointer active:bg-violet-700 disabled:opacity-50"
           >

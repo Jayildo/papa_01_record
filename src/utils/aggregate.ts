@@ -27,10 +27,14 @@ export interface PivotResult {
 }
 
 export function aggregate(records: TreeRecord[]): PivotResult {
+  const validRecords = records.filter(
+    (r) => r.species !== '' && r.diameter > 0 && r.location !== '',
+  );
+
   const locationOrder: string[] = [];
   const locationSet = new Set<string>();
 
-  for (const r of records) {
+  for (const r of validRecords) {
     if (!locationSet.has(r.location)) {
       locationSet.add(r.location);
       locationOrder.push(r.location);
@@ -48,7 +52,7 @@ export function aggregate(records: TreeRecord[]): PivotResult {
 
   const rows: PivotRow[] = locationOrder.map((loc) => {
     const counts = makeSpeciesCounts();
-    const locRecords = records.filter((r) => r.location === loc);
+    const locRecords = validRecords.filter((r) => r.location === loc);
 
     for (const r of locRecords) {
       const range = getDiameterRange(r.diameter);
