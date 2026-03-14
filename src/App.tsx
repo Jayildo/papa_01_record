@@ -89,10 +89,9 @@ export default function App() {
     [selectedId],
   );
 
-  // 레코드 DB 동기화
+  // 레코드 DB 동기화 (로컬 state는 건드리지 않음)
   const syncRecords = useCallback(
     async (records: TreeRecord[], projectId: string) => {
-      // 기존 레코드 삭제 후 재삽입 (간단한 전략)
       await supabase.from('tree_records').delete().eq('project_id', projectId);
       if (records.length > 0) {
         await supabase.from('tree_records').insert(
@@ -105,29 +104,6 @@ export default function App() {
           })),
         );
       }
-      // id 재로드 (DB에서 생성된 id 반영)
-      const { data } = await supabase
-        .from('tree_records')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('sort_order');
-      if (data) {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? {
-                  ...p,
-                  records: data.map((r) => ({
-                    id: r.id,
-                    diameter: Number(r.diameter),
-                    species: r.species as TreeRecord['species'],
-                    location: r.location,
-                  })),
-                }
-              : p,
-          ),
-        );
-      }
     },
     [],
   );
@@ -137,7 +113,7 @@ export default function App() {
     if (!selected) return;
     const timer = setTimeout(() => {
       syncRecords(selected.records, selected.id);
-    }, 800);
+    }, 1500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.records]);
