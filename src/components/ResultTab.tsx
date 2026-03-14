@@ -17,7 +17,7 @@ export default function ResultTab({ records, projectName }: Props) {
   const [zoom, setZoom] = useState(100);
 
   const zoomIn = useCallback(() => setZoom((z) => Math.min(z + 30, 200)), []);
-  const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 30, 50)), []);
+  const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 30, 20)), []);
   const zoomReset = useCallback(() => setZoom(100), []);
 
   // 핀치줌 — zoomRef로 현재 zoom 추적, 리스너 재등록 방지
@@ -51,7 +51,7 @@ export default function ResultTab({ records, projectName }: Props) {
         const dist = getDistance(e.touches);
         const scale = dist / startDist;
         const dampedScale = 1 + (scale - 1) * 0.4;
-        const newZoom = Math.round(Math.min(200, Math.max(50, startZoom * dampedScale)));
+        const newZoom = Math.round(Math.min(200, Math.max(20, startZoom * dampedScale)));
         setZoom(newZoom);
       }
     };
