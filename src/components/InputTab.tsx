@@ -129,6 +129,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
     if (wasDark) document.documentElement.classList.remove('dark');
 
     el.style.display = 'block';
+    el.style.width = '800px'; // 고정 폭 → A4에서 ~50행/페이지
 
     const cells = el.querySelectorAll('th, td');
     cells.forEach((cell) => {
@@ -144,6 +145,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
     cells.forEach((cell) => {
       (cell as HTMLElement).style.border = '';
     });
+    el.style.width = '';
     el.style.display = 'none';
 
     if (wasDark) document.documentElement.classList.add('dark');
