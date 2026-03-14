@@ -80,10 +80,6 @@ export default function ResultTab({ records, projectName }: Props) {
   };
 
   const sharePng = async () => {
-    if (!navigator.share || !navigator.canShare) {
-      downloadPng();
-      return;
-    }
     setExporting(true);
     try {
       const canvas = await captureTable();
@@ -91,13 +87,37 @@ export default function ResultTab({ records, projectName }: Props) {
         canvas.toBlob((b) => resolve(b!), 'image/png'),
       );
       const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
+
+      // Web Share API 지원 + 파일 공유 가능 여부 확인
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: fileName });
+        } catch (e) {
+          // 사용자가 공유를 취소한 경우 (AbortError) 무시
+          if (e instanceof Error && e.name !== 'AbortError') {
+            // 공유 실패 시 클립보드 복사 시도
+            await fallbackCopy(canvas, blob);
+          }
+        }
       } else {
-        downloadPng();
+        // Web Share 미지원 → 클립보드 복사 또는 다운로드
+        await fallbackCopy(canvas, blob);
       }
     } finally {
       setExporting(false);
+    }
+  };
+
+  const fallbackCopy = async (_canvas: HTMLCanvasElement, blob: Blob) => {
+    try {
+      // 클립보드에 이미지 복사 시도
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob }),
+      ]);
+      alert('이미지가 클립보드에 복사되었습니다.\n원하는 앱에 붙여넣기 하세요.');
+    } catch {
+      // 클립보드도 안 되면 다운로드
+      downloadPng();
     }
   };
 
