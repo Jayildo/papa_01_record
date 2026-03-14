@@ -233,11 +233,13 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
     }
   };
 
-  // 캡처 전용 테이블 인라인 스타일
+  // 캡처 전용 테이블 인라인 스타일 (50행/페이지 기준 컴팩트)
   const cellStyle: React.CSSProperties = {
     border: '1px solid #d1d5db',
-    padding: '6px 8px',
+    padding: '2px 4px',
     textAlign: 'center',
+    fontSize: '11px',
+    lineHeight: '1.2',
   };
   const thStyle: React.CSSProperties = {
     ...cellStyle,
@@ -279,16 +281,16 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
       )}
 
       {/* 캡처 전용 숨김 테이블 */}
-      <div ref={captureRef} style={{ display: 'none', backgroundColor: '#fff', padding: '12px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#111827' }}>
+      <div ref={captureRef} style={{ display: 'none', backgroundColor: '#fff', padding: '8px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>
             수목 입력 데이터
           </div>
           {projectName && (
-            <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '2px' }}>{projectName}</div>
+            <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '1px' }}>{projectName}</div>
           )}
         </div>
-        <table style={{ borderCollapse: 'collapse', fontSize: '13px', width: '100%' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: '11px', width: '100%' }}>
           <thead>
             <tr>
               <th style={{ ...thStyle, minWidth: '50px' }}>순번</th>
