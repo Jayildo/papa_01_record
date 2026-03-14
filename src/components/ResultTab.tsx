@@ -124,30 +124,56 @@ export default function ResultTab({ records, projectName }: Props) {
   const downloadPdf = async () => {
     setExporting(true);
     try {
-      const canvas = await captureTable();
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4',
+      const el = tableRef.current!;
+      const wasDark = document.documentElement.classList.contains('dark');
+      if (wasDark) document.documentElement.classList.remove('dark');
+
+      const prevZoom = zoom;
+      el.style.transform = 'scale(1)';
+
+      const cells = el.querySelectorAll('th, td');
+      cells.forEach((cell) => {
+        (cell as HTMLElement).style.border = '1px solid #d1d5db';
       });
+
+      const ROWS_PER_PAGE = 50;
+      const allRows = el.querySelectorAll('tbody tr');
+      const totalPages = Math.max(1, Math.ceil(allRows.length / ROWS_PER_PAGE));
+      const titleEl = el.querySelector(':scope > div') as HTMLElement; // 제목 영역
+
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth() - 20;
       const pageH = pdf.internal.pageSize.getHeight() - 20;
 
-      // 폭 기준으로 비율 고정, 페이지 높이에 맞춰 canvas를 세로로 슬라이스
-      const scale = pageW / canvas.width;
-      const sliceH = Math.floor(pageH / scale); // canvas px 단위 한 페이지 높이
+      for (let page = 0; page < totalPages; page++) {
+        const start = page * ROWS_PER_PAGE;
+        const end = start + ROWS_PER_PAGE;
+        allRows.forEach((tr, i) => {
+          (tr as HTMLElement).style.display = (i >= start && i < end) ? '' : 'none';
+        });
 
-      for (let y = 0; y < canvas.height; y += sliceH) {
-        if (y > 0) pdf.addPage();
-        const h = Math.min(sliceH, canvas.height - y);
-        const slice = document.createElement('canvas');
-        slice.width = canvas.width;
-        slice.height = h;
-        slice.getContext('2d')!.drawImage(
-          canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h,
+        if (page > 0) titleEl.style.display = 'none';
+
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+        });
+
+        if (page > 0) pdf.addPage();
+        const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
+        pdf.addImage(
+          canvas.toDataURL('image/png'), 'PNG',
+          10, 10, canvas.width * ratio, canvas.height * ratio,
         );
-        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 10, 10, pageW, h * scale);
       }
+
+      // 복원
+      allRows.forEach((tr) => { (tr as HTMLElement).style.display = ''; });
+      titleEl.style.display = '';
+      cells.forEach((cell) => { (cell as HTMLElement).style.border = ''; });
+      el.style.transform = `scale(${prevZoom / 100})`;
+      if (wasDark) document.documentElement.classList.add('dark');
 
       pdf.save(`${fileName}.pdf`);
     } finally {
