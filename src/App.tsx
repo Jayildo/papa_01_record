@@ -28,6 +28,7 @@ export default function App() {
   const [dark, setDark] = useState(loadDark);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const [syncError, setSyncError] = useState<string>('');
   const [showHistory, setShowHistory] = useState(false);
   // dirty 플래그: 사용자가 실제로 데이터를 수정했을 때만 true
   const dirtyRef = useRef(false);
@@ -103,8 +104,10 @@ export default function App() {
   const doSync = useCallback(
     async (records: TreeRecord[], projectId: string) => {
       setSyncStatus('syncing');
+      setSyncError('');
       const result = await syncRecords(records, projectId);
       setSyncStatus(result.status);
+      if (result.error) setSyncError(result.error);
 
       // 새로 INSERT된 레코드가 있을 때만 ID 업데이트 (무한 루프 방지)
       if (result.updatedRecords) {
@@ -357,7 +360,7 @@ export default function App() {
             <h1 className="text-lg font-bold truncate text-gray-900 dark:text-gray-100">
               {selected.name}
             </h1>
-            <SyncIndicator status={syncStatus} />
+            <SyncIndicator status={syncStatus} errorMsg={syncError} />
           </div>
           <button
             onClick={() => setShowHistory(true)}
