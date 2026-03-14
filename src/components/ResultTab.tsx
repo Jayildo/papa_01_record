@@ -125,9 +125,17 @@ export default function ResultTab({ records, projectName }: Props) {
     setExporting(true);
     try {
       const canvas = await captureTable();
-      const imgData = canvas.toDataURL('image/png');
-      const imgW = canvas.width;
-      const imgH = canvas.height;
+      const el = tableRef.current!;
+      const thead = el.querySelector('thead');
+      const firstTr = el.querySelector('tbody tr');
+      const ROWS_PER_PAGE = 50;
+
+      // scale=2로 캡처했으므로 DOM 높이 * 2
+      const headerH = thead ? thead.offsetHeight * 2 : 0;
+      const rowH = firstTr ? firstTr.getBoundingClientRect().height * 2 : 40;
+      const totalDataRows = result.rows.length + 1; // +1 소계 행
+      const totalPages = Math.ceil(totalDataRows / ROWS_PER_PAGE);
+
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
@@ -135,10 +143,47 @@ export default function ResultTab({ records, projectName }: Props) {
       });
       const pageW = pdf.internal.pageSize.getWidth() - 20;
       const pageH = pdf.internal.pageSize.getHeight() - 20;
-      const ratio = Math.min(pageW / imgW, pageH / imgH);
-      const w = imgW * ratio;
-      const h = imgH * ratio;
-      pdf.addImage(imgData, 'PNG', 10, 10, w, h);
+
+      // 테이블 내부 padding(12px) 상단 + 제목 영역 높이 측정
+      const titleArea = el.querySelector('div[style]') as HTMLElement | null;
+      const titleH = titleArea ? titleArea.offsetHeight * 2 : 0;
+      const paddingTop = 12 * 2; // padding 12px * scale 2
+      const contentStartY = paddingTop + titleH;
+
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage();
+
+        const startRow = page * ROWS_PER_PAGE;
+        const endRow = Math.min(startRow + ROWS_PER_PAGE, totalDataRows);
+        const rowCount = endRow - startRow;
+
+        // 첫 페이지가 아니면 헤더를 포함시키기 위해 별도 처리
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+
+        if (page === 0) {
+          sliceCanvas.height = Math.min(contentStartY + headerH + rowCount * rowH, canvas.height);
+          const ctx = sliceCanvas.getContext('2d')!;
+          ctx.drawImage(canvas, 0, 0, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
+        } else {
+          // 헤더 + 해당 페이지 행
+          const dataSliceTop = contentStartY + headerH + startRow * rowH;
+          const dataSliceH = rowCount * rowH;
+          sliceCanvas.height = headerH + dataSliceH;
+          const ctx = sliceCanvas.getContext('2d')!;
+          // 헤더 복사
+          ctx.drawImage(canvas, 0, contentStartY, canvas.width, headerH, 0, 0, canvas.width, headerH);
+          // 데이터 행 복사
+          ctx.drawImage(canvas, 0, dataSliceTop, canvas.width, dataSliceH, 0, headerH, canvas.width, dataSliceH);
+        }
+
+        const imgData = sliceCanvas.toDataURL('image/png');
+        const ratio = Math.min(pageW / sliceCanvas.width, pageH / sliceCanvas.height);
+        const w = sliceCanvas.width * ratio;
+        const h = sliceCanvas.height * ratio;
+        pdf.addImage(imgData, 'PNG', 10, 10, w, h);
+      }
+
       pdf.save(`${fileName}.pdf`);
     } finally {
       setExporting(false);
@@ -275,7 +320,7 @@ export default function ResultTab({ records, projectName }: Props) {
       </div>
 
       {/* 캡처 대상 영역 (핀치줌 감지) */}
-      <div ref={containerRef} className="overflow-auto -mx-4 px-4 pb-4 touch-none">
+      <div ref={containerRef} className="overflow-auto -mx-4 px-4 pb-4 touch-pan-x touch-pan-y">
         <div
           ref={tableRef}
           style={{
