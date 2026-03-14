@@ -167,17 +167,6 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
     setExporting(true);
     try {
       const canvas = await captureTable();
-      const el = captureRef.current!;
-      const thead = el.querySelector('thead');
-      const firstTr = el.querySelector('tbody tr');
-      const ROWS_PER_PAGE = 50;
-
-      // scale=2로 캡처했으므로 DOM 높이 * 2
-      const headerH = thead ? (thead as HTMLElement).offsetHeight * 2 : 0;
-      const rowH = firstTr ? (firstTr as HTMLElement).offsetHeight * 2 : 40;
-      const totalDataRows = records.length;
-      const totalPages = Math.max(1, Math.ceil(totalDataRows / ROWS_PER_PAGE));
-
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
@@ -186,40 +175,20 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
       const pageW = pdf.internal.pageSize.getWidth() - 20;
       const pageH = pdf.internal.pageSize.getHeight() - 20;
 
-      // 제목 영역 높이 측정
-      const titleArea = el.querySelector('div[style]') as HTMLElement | null;
-      const titleH = titleArea ? titleArea.offsetHeight * 2 : 0;
-      const paddingTop = 8 * 2; // padding 8px * scale 2
-      const contentStartY = paddingTop + titleH;
+      // 폭 기준으로 비율 고정, 페이지 높이에 맞춰 canvas를 세로로 슬라이스
+      const scale = pageW / canvas.width;
+      const sliceH = Math.floor(pageH / scale); // canvas px 단위 한 페이지 높이
 
-      for (let page = 0; page < totalPages; page++) {
-        if (page > 0) pdf.addPage();
-
-        const startRow = page * ROWS_PER_PAGE;
-        const endRow = Math.min(startRow + ROWS_PER_PAGE, totalDataRows);
-        const rowCount = endRow - startRow;
-
-        const sliceCanvas = document.createElement('canvas');
-        sliceCanvas.width = canvas.width;
-
-        if (page === 0) {
-          sliceCanvas.height = Math.min(contentStartY + headerH + rowCount * rowH, canvas.height);
-          const ctx = sliceCanvas.getContext('2d')!;
-          ctx.drawImage(canvas, 0, 0, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height);
-        } else {
-          const dataSliceTop = contentStartY + headerH + startRow * rowH;
-          const dataSliceH = rowCount * rowH;
-          sliceCanvas.height = headerH + dataSliceH;
-          const ctx = sliceCanvas.getContext('2d')!;
-          ctx.drawImage(canvas, 0, contentStartY, canvas.width, headerH, 0, 0, canvas.width, headerH);
-          ctx.drawImage(canvas, 0, dataSliceTop, canvas.width, dataSliceH, 0, headerH, canvas.width, dataSliceH);
-        }
-
-        const imgData = sliceCanvas.toDataURL('image/png');
-        const ratio = Math.min(pageW / sliceCanvas.width, pageH / sliceCanvas.height);
-        const w = sliceCanvas.width * ratio;
-        const h = sliceCanvas.height * ratio;
-        pdf.addImage(imgData, 'PNG', 10, 10, w, h);
+      for (let y = 0; y < canvas.height; y += sliceH) {
+        if (y > 0) pdf.addPage();
+        const h = Math.min(sliceH, canvas.height - y);
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = h;
+        slice.getContext('2d')!.drawImage(
+          canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h,
+        );
+        pdf.addImage(slice.toDataURL('image/png'), 'PNG', 10, 10, pageW, h * scale);
       }
 
       pdf.save(`${fileName}.pdf`);
