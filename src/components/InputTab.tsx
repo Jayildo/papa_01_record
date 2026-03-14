@@ -142,9 +142,9 @@ export default function InputTab({ records, setRecords }: Props) {
               diameterColor(r.diameter) || 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
             }`}
           >
-            {/* 한 줄: 순번 | 직경 | 수종 | 위치 | 삭제 */}
+            {/* 1줄: 순번 | 직경 | 수종 | 삭제 */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-gray-400 dark:text-gray-500 w-6 text-center shrink-0">
+              <span className="text-xs font-bold text-gray-400 dark:text-gray-500 w-5 text-center shrink-0">
                 {idx + 1}
               </span>
               <input
@@ -158,15 +158,17 @@ export default function InputTab({ records, setRecords }: Props) {
                   placeholder:text-gray-400 dark:placeholder:text-gray-500 shrink-0"
                 placeholder="B"
               />
-              <SpeciesToggle
-                value={r.species}
-                onChange={(v) => updateRecord(r.id, 'species', v)}
-              />
+              <div className="shrink-0">
+                <SpeciesToggle
+                  value={r.species}
+                  onChange={(v) => updateRecord(r.id, 'species', v)}
+                />
+              </div>
               <LocationComboBox
                 value={r.location}
                 options={locationOptions}
                 onChange={(v) => updateRecord(r.id, 'location', v)}
-                className="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm
+                className="flex-1 min-w-16 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm
                   bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                   placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 placeholder="위치"
