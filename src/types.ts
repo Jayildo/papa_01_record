@@ -3,6 +3,8 @@ export interface TreeRecord {
   diameter: number;
   species: '낙엽수' | '상록수' | '';
   location: string;
+  updated_at?: string;
+  _isNew?: boolean;
 }
 
 export interface Project {
@@ -27,3 +29,5 @@ export const DIAMETER_LABELS: Record<DiameterRange, string> = {
   '61~70': 'B61~70',
   '71~': 'B71~',
 };
+
+export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error';

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Project, TreeRecord } from './types';
+import type { Project, TreeRecord, SyncStatus } from './types';
 import { supabase } from './lib/supabase';
+import { syncRecords, flushOfflineQueue } from './utils/syncEngine';
 import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
 import PinScreen, { isAuthed } from './components/PinScreen';
+import SyncIndicator from './components/SyncIndicator';
 
 const DARK_KEY = 'papa_01_dark';
 
@@ -24,6 +26,7 @@ export default function App() {
   const [showNewInput, setShowNewInput] = useState(false);
   const [dark, setDark] = useState(loadDark);
   const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
 
   // 다크모드
   useEffect(() => {
@@ -44,6 +47,7 @@ export default function App() {
     const { data: recordRows, error: recordsError } = await supabase
       .from('tree_records')
       .select('*')
+      .is('deleted_at', null)
       .order('sort_order', { ascending: true });
     if (recordsError) console.error('loadProjects records:', recordsError);
 
@@ -91,22 +95,20 @@ export default function App() {
     [selectedId],
   );
 
-  // 레코드 DB 동기화 (로컬 state는 건드리지 않음)
-  const syncRecords = useCallback(
+  // 레코드 DB 동기화 (sync engine 사용)
+  const doSync = useCallback(
     async (records: TreeRecord[], projectId: string) => {
-      const { error: deleteError } = await supabase.from('tree_records').delete().eq('project_id', projectId);
-      if (deleteError) console.error('syncRecords delete:', deleteError);
-      if (records.length > 0) {
-        const { error: insertError } = await supabase.from('tree_records').insert(
-          records.map((r, i) => ({
-            project_id: projectId,
-            diameter: r.diameter,
-            species: r.species,
-            location: r.location,
-            sort_order: i,
-          })),
+      setSyncStatus('syncing');
+      const result = await syncRecords(records, projectId);
+      setSyncStatus(result.status);
+
+      // Update local state with real DB ids (for newly inserted records)
+      if (result.updatedRecords) {
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId ? { ...p, records: result.updatedRecords! } : p,
+          ),
         );
-        if (insertError) console.error('syncRecords insert:', insertError);
       }
     },
     [],
@@ -116,11 +118,35 @@ export default function App() {
   useEffect(() => {
     if (!selected) return;
     const timer = setTimeout(() => {
-      syncRecords(selected.records, selected.id);
+      doSync(selected.records, selected.id);
     }, 1500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.records]);
+
+  // 온라인/오프라인 감지
+  useEffect(() => {
+    const handleOnline = () => {
+      setSyncStatus('synced');
+      // Flush offline queue
+      flushOfflineQueue((projectId) => {
+        const project = projects.find((p) => p.id === projectId);
+        return project?.records;
+      });
+    };
+    const handleOffline = () => setSyncStatus('offline');
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Set initial status
+    if (!navigator.onLine) setSyncStatus('offline');
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [projects]);
 
   const createProject = async () => {
     const name = newName.trim();
@@ -303,9 +329,12 @@ export default function App() {
           >
             ←
           </button>
-          <h1 className="text-lg font-bold truncate flex-1 text-gray-900 dark:text-gray-100">
-            {selected.name}
-          </h1>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold truncate text-gray-900 dark:text-gray-100">
+              {selected.name}
+            </h1>
+            <SyncIndicator status={syncStatus} />
+          </div>
           {darkToggle}
         </div>
 

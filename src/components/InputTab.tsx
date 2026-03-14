@@ -89,6 +89,7 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
         diameter: 0,
         species: '',
         location: lastRecord?.location ?? '',
+        _isNew: true,
       },
     ]);
   };
