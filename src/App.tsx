@@ -315,7 +315,7 @@ export default function App() {
         {activeTab === 'input' ? (
           <InputTab records={selected.records} setRecords={setRecords} />
         ) : (
-          <ResultTab records={selected.records} />
+          <ResultTab records={selected.records} projectName={selected.name} />
         )}
       </div>
     </div>
