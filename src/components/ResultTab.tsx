@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, useCallback } from 'react';
+import { Fragment, useRef, useState, useCallback, useEffect } from 'react';
 import type { TreeRecord } from '../types';
 import { DIAMETER_RANGES, SPECIES_LIST, DIAMETER_LABELS } from '../types';
 import { aggregate } from '../utils/aggregate';
@@ -12,12 +12,53 @@ interface Props {
 
 export default function ResultTab({ records, projectName }: Props) {
   const tableRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [zoom, setZoom] = useState(100);
 
   const zoomIn = useCallback(() => setZoom((z) => Math.min(z + 10, 200)), []);
   const zoomOut = useCallback(() => setZoom((z) => Math.max(z - 10, 50)), []);
   const zoomReset = useCallback(() => setZoom(100), []);
+
+  // 핀치줌
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let startDist = 0;
+    let startZoom = 100;
+
+    const getDistance = (touches: TouchList) => {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        startDist = getDistance(e.touches);
+        startZoom = zoom;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const dist = getDistance(e.touches);
+        const scale = dist / startDist;
+        const newZoom = Math.round(Math.min(200, Math.max(50, startZoom * scale)));
+        setZoom(newZoom);
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [zoom]);
 
   const validRecords = records.filter((r) => r.diameter > 0 && r.location.trim() !== '' && r.species !== '');
 
@@ -37,11 +78,14 @@ export default function ResultTab({ records, projectName }: Props) {
     const wasDark = document.documentElement.classList.contains('dark');
     if (wasDark) document.documentElement.classList.remove('dark');
 
+    // 캡처 시 zoom을 100%로 리셋
+    const prevZoom = zoom;
+    el.style.transform = 'scale(1)';
+
     // 캡처 전: 모든 th/td에 인라인 border 강제 적용
     const cells = el.querySelectorAll('th, td');
     cells.forEach((cell) => {
-      const el = cell as HTMLElement;
-      el.style.border = '1px solid #d1d5db';
+      (cell as HTMLElement).style.border = '1px solid #d1d5db';
     });
 
     const canvas = await html2canvas(el, {
@@ -50,10 +94,11 @@ export default function ResultTab({ records, projectName }: Props) {
       useCORS: true,
     });
 
-    // 캡처 후: 인라인 스타일 제거
+    // 캡처 후: 원래 상태 복원
     cells.forEach((cell) => {
       (cell as HTMLElement).style.border = '';
     });
+    el.style.transform = `scale(${prevZoom / 100})`;
 
     if (wasDark) document.documentElement.classList.add('dark');
     return canvas;
@@ -105,30 +150,44 @@ export default function ResultTab({ records, projectName }: Props) {
       );
       const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
 
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: fileName });
-        } catch (e) {
-          if (e instanceof Error && e.name !== 'AbortError') {
-            await fallbackCopy(blob);
+      // 1순위: Web Share API (모바일 공유 시트)
+      if (typeof navigator.share === 'function') {
+        const shareData: ShareData = { files: [file], title: fileName };
+        if (navigator.canShare?.(shareData)) {
+          try {
+            await navigator.share(shareData);
+            return;
+          } catch (e) {
+            if (e instanceof Error && e.name === 'AbortError') return;
           }
         }
-      } else {
-        await fallbackCopy(blob);
+        // 파일 공유 불가 시 URL 없이 텍스트만 공유 시도
+        try {
+          await navigator.share({ title: fileName, text: '수목 전정 현황 집계표' });
+          return;
+        } catch {
+          // 무시
+        }
       }
+
+      // 2순위: 클립보드 복사
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob }),
+        ]);
+        alert('이미지가 클립보드에 복사되었습니다.\n원하는 앱에 붙여넣기 하세요.');
+        return;
+      } catch {
+        // 무시
+      }
+
+      // 3순위: 다운로드
+      const link = document.createElement('a');
+      link.download = `${fileName}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
     } finally {
       setExporting(false);
-    }
-  };
-
-  const fallbackCopy = async (blob: Blob) => {
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob }),
-      ]);
-      alert('이미지가 클립보드에 복사되었습니다.\n원하는 앱에 붙여넣기 하세요.');
-    } catch {
-      downloadPng();
     }
   };
 
@@ -211,8 +270,8 @@ export default function ResultTab({ records, projectName }: Props) {
         </div>
       </div>
 
-      {/* 캡처 대상 영역 */}
-      <div className="overflow-auto -mx-4 px-4 pb-4">
+      {/* 캡처 대상 영역 (핀치줌 감지) */}
+      <div ref={containerRef} className="overflow-auto -mx-4 px-4 pb-4 touch-none">
         <div
           ref={tableRef}
           style={{
