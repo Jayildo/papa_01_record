@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, TreeRecord, SyncStatus } from './types';
 import { supabase } from './lib/supabase';
-import { syncRecords, flushOfflineQueue } from './utils/syncEngine';
+import { syncChanges, syncRecords, flushOfflineQueue } from './utils/syncEngine';
+import type { PendingChanges } from './utils/syncEngine';
 import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
 import PinScreen, { isAuthed } from './components/PinScreen';
@@ -32,6 +33,13 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   // dirty 플래그: 사용자가 실제로 데이터를 수정했을 때만 true
   const dirtyRef = useRef(false);
+  // 변경 추적: 실제 변경된 레코드만 sync
+  const pendingRef = useRef<PendingChanges>({
+    updates: new Map(),
+    inserts: [],
+    deletes: [],
+    allRecords: [],
+  });
 
   // 다크모드
   useEffect(() => {
@@ -86,14 +94,51 @@ export default function App() {
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
 
-  // 레코드 업데이트 (로컬 state + DB 동기화)
+  // 레코드 업데이트 (로컬 state + 변경 추적)
   const setRecords = useCallback(
     (updater: TreeRecord[] | ((prev: TreeRecord[]) => TreeRecord[])) => {
-      dirtyRef.current = true; // 사용자가 수정함 → sync 허용
+      dirtyRef.current = true;
       setProjects((prev) =>
         prev.map((p) => {
           if (p.id !== selectedId) return p;
-          const newRecords = typeof updater === 'function' ? updater(p.records) : updater;
+          const oldRecords = p.records;
+          const newRecords = typeof updater === 'function' ? updater(oldRecords) : updater;
+
+          // 변경 추적
+          const pending = pendingRef.current;
+          const oldIds = new Set(oldRecords.map((r) => r.id));
+          const newIds = new Set(newRecords.map((r) => r.id));
+
+          // 삭제된 레코드 (old에는 있고 new에는 없음)
+          for (const r of oldRecords) {
+            if (!newIds.has(r.id) && !r._isNew) {
+              pending.deletes.push(r.id);
+              pending.updates.delete(r.id);
+            }
+          }
+
+          // 추가/수정된 레코드
+          for (const r of newRecords) {
+            if (r._isNew || !oldIds.has(r.id)) {
+              // 새 레코드 (중복 방지)
+              if (!pending.inserts.some((ins) => ins.id === r.id)) {
+                pending.inserts.push(r);
+              } else {
+                // 이미 inserts에 있으면 업데이트
+                pending.inserts = pending.inserts.map((ins) =>
+                  ins.id === r.id ? r : ins,
+                );
+              }
+            } else {
+              // 기존 레코드 수정
+              const old = oldRecords.find((o) => o.id === r.id);
+              if (old && (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location)) {
+                pending.updates.set(r.id, r);
+              }
+            }
+          }
+
+          pending.allRecords = newRecords;
           return { ...p, records: newRecords };
         }),
       );
@@ -101,19 +146,32 @@ export default function App() {
     [selectedId],
   );
 
-  // 레코드 DB 동기화 (sync engine 사용)
+  // 레코드 DB 동기화 (변경 기반 sync)
   const doSync = useCallback(
-    async (records: TreeRecord[], projectId: string) => {
+    async (_records: TreeRecord[], projectId: string) => {
+      const changes = { ...pendingRef.current };
+      // sync 전에 pending 초기화 (sync 중 새 변경은 다음 cycle로)
+      pendingRef.current = {
+        updates: new Map(),
+        inserts: [],
+        deletes: [],
+        allRecords: changes.allRecords,
+      };
+
       setSyncStatus('syncing');
       setSyncError('');
-      const result = await syncRecords(records, projectId);
+      // pending이 비어있으면 full sync (복원 등 전체 교체 시)
+      const hasChanges = changes.updates.size > 0 || changes.inserts.length > 0 || changes.deletes.length > 0;
+      const result = hasChanges
+        ? await syncChanges(changes, projectId)
+        : await syncRecords(changes.allRecords, projectId);
       setSyncStatus(result.status);
       if (result.error) setSyncError(result.error);
 
       // Only patch temp IDs → real IDs (never replace entire state)
       if (result.idMappings && result.idMappings.length > 0) {
         const map = new Map(result.idMappings.map((m) => [m.tempId, m.realId]));
-        dirtyRef.current = false; // ID patch is not a user edit
+        dirtyRef.current = false;
         setProjects((prev) =>
           prev.map((p) => {
             if (p.id !== projectId) return p;
@@ -128,8 +186,17 @@ export default function App() {
         );
       }
 
-      // Keep dirtyRef true if there were errors (for retry)
-      if (result.status !== 'error') {
+      // 에러 시 변경분 복원 (재시도용)
+      if (result.status === 'error') {
+        const p = pendingRef.current;
+        changes.updates.forEach((v, k) => { if (!p.updates.has(k)) p.updates.set(k, v); });
+        changes.inserts.forEach((ins) => {
+          if (!p.inserts.some((i) => i.id === ins.id)) p.inserts.push(ins);
+        });
+        changes.deletes.forEach((id) => {
+          if (!p.deletes.includes(id)) p.deletes.push(id);
+        });
+      } else {
         dirtyRef.current = false;
       }
     },
@@ -139,7 +206,14 @@ export default function App() {
   const handleHistoryRestore = useCallback(
     (restoredRecords: TreeRecord[]) => {
       if (!selectedId) return;
-      dirtyRef.current = true; // 복원도 변경이므로 sync 허용
+      dirtyRef.current = true;
+      // 복원은 전체 교체 → pending 초기화, full sync로 처리
+      pendingRef.current = {
+        updates: new Map(),
+        inserts: [],
+        deletes: [],
+        allRecords: restoredRecords,
+      };
       setProjects((prev) =>
         prev.map((p) =>
           p.id === selectedId ? { ...p, records: restoredRecords } : p,
@@ -154,7 +228,7 @@ export default function App() {
     if (!selected || !dirtyRef.current) return;
     const timer = setTimeout(() => {
       doSync(selected.records, selected.id);
-    }, 1500);
+    }, 3000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.records]);

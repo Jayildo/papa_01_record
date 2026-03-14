@@ -4,18 +4,30 @@ import { backupRecords, queueOfflineChange, removeFromQueue } from './offlineSto
 
 let syncInProgress = false;
 
+export interface PendingChanges {
+  updates: Map<number, TreeRecord>;  // 수정된 레코드
+  inserts: TreeRecord[];              // 새 레코드
+  deletes: number[];                  // soft delete할 ID
+  /** sort_order 동기화를 위한 전체 레코드 (updates/inserts 외 기존 레코드 포함) */
+  allRecords: TreeRecord[];
+}
+
 interface SyncResult {
   status: SyncStatus;
   idMappings?: Array<{ tempId: number; realId: number }>;
   error?: string;
 }
 
-export async function syncRecords(
-  localRecords: TreeRecord[],
+/**
+ * 변경 기반 sync — 변경된 레코드만 전송
+ * full diff 대신 pendingChanges로 전달받은 변경분만 처리
+ */
+export async function syncChanges(
+  changes: PendingChanges,
   projectId: string,
 ): Promise<SyncResult> {
-  // 1. Always backup to localStorage first
-  backupRecords(projectId, localRecords);
+  // 1. Always backup full state to localStorage
+  backupRecords(projectId, changes.allRecords);
 
   // 2. Prevent concurrent sync
   if (syncInProgress) {
@@ -24,6 +36,139 @@ export async function syncRecords(
 
   // 3. Check online status
   if (!navigator.onLine) {
+    queueOfflineChange(projectId, changes.allRecords);
+    return { status: 'offline' };
+  }
+
+  // 4. Nothing to sync
+  if (changes.updates.size === 0 && changes.inserts.length === 0 && changes.deletes.length === 0) {
+    return { status: 'synced' };
+  }
+
+  syncInProgress = true;
+
+  try {
+    const errors: string[] = [];
+
+    // 5. Batch UPDATE via RPC (1 API call for all updates)
+    if (changes.updates.size > 0) {
+      const updatePayload = Array.from(changes.updates.entries()).map(([, r], idx) => {
+        // sort_order는 allRecords에서의 위치로 계산
+        const sortOrder = changes.allRecords.findIndex((ar) => ar.id === r.id);
+        return {
+          id: r.id,
+          diameter: r.diameter,
+          species: r.species,
+          location: r.location,
+          sort_order: sortOrder >= 0 ? sortOrder : idx,
+        };
+      });
+
+      const { error } = await supabase.rpc('batch_update_records', {
+        p_project_id: projectId,
+        p_records: updatePayload,
+      });
+
+      if (error) {
+        console.error('syncEngine batch update:', error);
+        // RPC 실패 시 개별 UPDATE로 폴백
+        const fallbackPromises = updatePayload.map((rec) =>
+          supabase
+            .from('tree_records')
+            .update({
+              diameter: rec.diameter,
+              species: rec.species,
+              location: rec.location,
+              sort_order: rec.sort_order,
+            })
+            .eq('id', rec.id)
+            .then(({ error: e }) => {
+              if (e) {
+                console.error('syncEngine fallback update id=' + rec.id + ':', e);
+                errors.push(e.message);
+              }
+            }),
+        );
+        await Promise.all(fallbackPromises);
+      }
+    }
+
+    // 6. INSERT new records (1 API call)
+    let insertedRows: Array<{ id: number }> = [];
+    if (changes.inserts.length > 0) {
+      const toInsert = changes.inserts.map((r) => {
+        const sortOrder = changes.allRecords.findIndex((ar) => ar.id === r.id);
+        return {
+          project_id: projectId,
+          diameter: r.diameter,
+          species: r.species,
+          location: r.location,
+          sort_order: sortOrder >= 0 ? sortOrder : 0,
+        };
+      });
+
+      const { data, error } = await supabase
+        .from('tree_records')
+        .insert(toInsert)
+        .select('id');
+      if (error) {
+        console.error('syncEngine insert:', error);
+        errors.push(error.message);
+      }
+      insertedRows = data ?? [];
+    }
+
+    // 7. Soft DELETE (1 API call)
+    if (changes.deletes.length > 0) {
+      const { error } = await supabase
+        .from('tree_records')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', changes.deletes);
+      if (error) {
+        console.error('syncEngine softDelete:', error);
+        errors.push(error.message);
+      }
+    }
+
+    // 8. Build ID mappings for newly inserted records
+    const idMappings: Array<{ tempId: number; realId: number }> = [];
+    changes.inserts.forEach((r, i) => {
+      const realId = insertedRows[i]?.id;
+      if (realId != null && realId !== r.id) {
+        idMappings.push({ tempId: r.id, realId });
+      }
+    });
+
+    // 9. Clear offline queue on success
+    if (errors.length === 0) {
+      removeFromQueue(projectId);
+    }
+
+    return {
+      status: errors.length > 0 ? 'error' : 'synced',
+      idMappings: idMappings.length > 0 ? idMappings : undefined,
+      error: errors.length > 0 ? errors.join('; ') : undefined,
+    };
+  } catch (err) {
+    console.error('syncEngine unexpected:', err);
+    queueOfflineChange(projectId, changes.allRecords);
+    return { status: 'error', error: String(err) };
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+/**
+ * Legacy full-sync — offline queue flush 및 초기 동기화용으로 유지
+ */
+export async function syncRecords(
+  localRecords: TreeRecord[],
+  projectId: string,
+): Promise<SyncResult> {
+  backupRecords(projectId, localRecords);
+
+  if (syncInProgress) return { status: 'syncing' };
+  if (!navigator.onLine) {
     queueOfflineChange(projectId, localRecords);
     return { status: 'offline' };
   }
@@ -31,7 +176,6 @@ export async function syncRecords(
   syncInProgress = true;
 
   try {
-    // 4. Fetch server records (active only)
     const { data: serverRows, error: fetchError } = await supabase
       .from('tree_records')
       .select('*')
@@ -47,135 +191,38 @@ export async function syncRecords(
 
     const serverRecords = serverRows ?? [];
 
-    // 5. Empty array guard — prevent accidental data wipe
     if (localRecords.length === 0 && serverRecords.length > 0) {
       console.warn('syncEngine: blocked empty-array sync (server has', serverRecords.length, 'records)');
       return { status: 'synced' };
     }
 
-    // 6. Build server map by id
     const serverMap = new Map<number, (typeof serverRows)[0]>();
-    for (const row of serverRecords) {
-      serverMap.set(row.id, row);
-    }
+    for (const row of serverRecords) serverMap.set(row.id, row);
 
-    // 7. Separate new vs existing records
-    const toInsert: Array<{
-      project_id: string;
-      diameter: number;
-      species: string;
-      location: string;
-      sort_order: number;
-    }> = [];
-    const toUpdate: Array<{
-      id: number;
-      diameter: number;
-      species: string;
-      location: string;
-      sort_order: number;
-    }> = [];
-    const localIds = new Set<number>();
+    // Build changes from full diff
+    const updates = new Map<number, TreeRecord>();
+    const inserts: TreeRecord[] = [];
+    const deletes: number[] = [];
 
-    localRecords.forEach((r, i) => {
+    localRecords.forEach((r) => {
       if (r._isNew || !serverMap.has(r.id)) {
-        // New record — INSERT without id
-        toInsert.push({
-          project_id: projectId,
-          diameter: r.diameter,
-          species: r.species,
-          location: r.location,
-          sort_order: i,
-        });
+        inserts.push(r);
       } else {
-        // Existing record — UPDATE (not upsert, to avoid GENERATED ALWAYS id issue)
-        localIds.add(r.id);
-        toUpdate.push({
-          id: r.id,
-          diameter: r.diameter,
-          species: r.species,
-          location: r.location,
-          sort_order: i,
-        });
+        updates.set(r.id, r);
       }
     });
 
-    // 8. Soft delete: records on server but not in local
-    const toSoftDelete: number[] = [];
+    const localIds = new Set(localRecords.filter((r) => !r._isNew).map((r) => r.id));
     for (const [serverId] of serverMap) {
-      if (!localIds.has(serverId)) {
-        toSoftDelete.push(serverId);
-      }
+      if (!localIds.has(serverId)) deletes.push(serverId);
     }
 
-    // 9. Execute operations
-    const errors: string[] = [];
-
-    // Update existing records (개별 UPDATE — id가 GENERATED ALWAYS이므로 upsert 불가)
-    if (toUpdate.length > 0) {
-      const updatePromises = toUpdate.map(({ id, ...data }) =>
-        supabase
-          .from('tree_records')
-          .update(data)
-          .eq('id', id)
-          .then(({ error }) => {
-            if (error) {
-              console.error('syncEngine update id=' + id + ':', error);
-              errors.push(error.message);
-            }
-          }),
-      );
-      await Promise.all(updatePromises);
-    }
-
-    // Insert new records
-    let insertedRows: Array<{ id: number }> = [];
-    if (toInsert.length > 0) {
-      const { data, error } = await supabase
-        .from('tree_records')
-        .insert(toInsert)
-        .select('id');
-      if (error) {
-        console.error('syncEngine insert:', error);
-        errors.push(error.message);
-      }
-      insertedRows = data ?? [];
-    }
-
-    // Soft delete removed records
-    if (toSoftDelete.length > 0) {
-      const { error } = await supabase
-        .from('tree_records')
-        .update({ deleted_at: new Date().toISOString() })
-        .in('id', toSoftDelete);
-      if (error) {
-        console.error('syncEngine softDelete:', error);
-        errors.push(error.message);
-      }
-    }
-
-    // 10. Build ID mappings for newly inserted records
-    const idMappings: Array<{ tempId: number; realId: number }> = [];
-    let insertIdx = 0;
-    for (const r of localRecords) {
-      if (r._isNew || !serverMap.has(r.id)) {
-        const realId = insertedRows[insertIdx]?.id;
-        if (realId != null && realId !== r.id) {
-          idMappings.push({ tempId: r.id, realId });
-        }
-        insertIdx++;
-      }
-    }
-
-    // 11. Clear offline queue on success
-    if (errors.length === 0) {
-      removeFromQueue(projectId);
-    }
-
-    return {
-      status: errors.length > 0 ? 'error' : 'synced',
-      idMappings: idMappings.length > 0 ? idMappings : undefined,
-      error: errors.length > 0 ? errors.join('; ') : undefined,
-    };
+    // Delegate to syncChanges (reuse logic)
+    syncInProgress = false; // release lock for syncChanges
+    return await syncChanges(
+      { updates, inserts, deletes, allRecords: localRecords },
+      projectId,
+    );
   } catch (err) {
     console.error('syncEngine unexpected:', err);
     queueOfflineChange(projectId, localRecords);
