@@ -6,6 +6,7 @@ import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
 import PinScreen, { isAuthed } from './components/PinScreen';
 import SyncIndicator from './components/SyncIndicator';
+import HistoryPanel from './components/HistoryPanel';
 
 const DARK_KEY = 'papa_01_dark';
 
@@ -27,6 +28,7 @@ export default function App() {
   const [dark, setDark] = useState(loadDark);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
+  const [showHistory, setShowHistory] = useState(false);
 
   // 다크모드
   useEffect(() => {
@@ -112,6 +114,20 @@ export default function App() {
       }
     },
     [],
+  );
+
+  const handleHistoryRestore = useCallback(
+    (restoredRecords: TreeRecord[]) => {
+      if (!selectedId) return;
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === selectedId ? { ...p, records: restoredRecords } : p,
+        ),
+      );
+      // Trigger sync with restored data
+      // The debounced effect will handle this automatically
+    },
+    [selectedId],
   );
 
   // 디바운스된 저장
@@ -335,6 +351,16 @@ export default function App() {
             </h1>
             <SyncIndicator status={syncStatus} />
           </div>
+          <button
+            onClick={() => setShowHistory(true)}
+            className="w-10 h-10 flex items-center justify-center rounded-full cursor-pointer
+              text-gray-500 hover:bg-gray-100 active:bg-gray-200
+              dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600
+              transition-colors text-lg shrink-0"
+            title="변경 이력"
+          >
+            ↺
+          </button>
           {darkToggle}
         </div>
 
@@ -353,6 +379,14 @@ export default function App() {
           <ResultTab records={selected.records} projectName={selected.name} />
         )}
       </div>
+
+      {showHistory && selected && (
+        <HistoryPanel
+          projectId={selected.id}
+          onRestore={handleHistoryRestore}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
   );
 }
