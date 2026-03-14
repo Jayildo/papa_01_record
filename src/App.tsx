@@ -184,7 +184,7 @@ export default function App() {
       <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
         <div className="max-w-lg mx-auto p-4">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">수목 흉고직경 집계</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">수목 전정 현황</h1>
             {darkToggle}
           </div>
 

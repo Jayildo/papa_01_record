@@ -137,11 +137,14 @@ export default function ResultTab({ records, projectName }: Props) {
       {/* 캡처 대상 영역 */}
       <div className="overflow-x-auto -mx-4 px-4 pb-4">
         <div ref={tableRef} className="inline-block min-w-full bg-white dark:bg-gray-900 p-2">
-          {projectName && (
-            <h2 className="text-sm font-bold mb-2 text-gray-800 dark:text-gray-200">
-              {projectName} - 수목 흉고직경 집계
+          <div className="text-center mb-3">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              수목 전정 현황
             </h2>
-          )}
+            {projectName && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{projectName}</p>
+            )}
+          </div>
           <table className="border-collapse text-sm min-w-full">
             <thead>
               <tr className="bg-gray-100 dark:bg-gray-800">

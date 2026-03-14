@@ -33,7 +33,7 @@ export default function PinScreen({ onSuccess }: Props) {
     <div className="min-h-dvh flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
       <div className="w-full max-w-xs">
         <h1 className="text-xl font-bold text-center mb-8 text-gray-900 dark:text-gray-100">
-          수목 흉고직경 집계
+          수목 전정 현황
         </h1>
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-200 dark:border-gray-700">
           <label className="block text-sm text-gray-500 dark:text-gray-400 mb-2">비밀번호</label>
