@@ -67,9 +67,8 @@ export async function syncRecords(
       location: string;
       sort_order: number;
     }> = [];
-    const toUpsert: Array<{
+    const toUpdate: Array<{
       id: number;
-      project_id: string;
       diameter: number;
       species: string;
       location: string;
@@ -88,11 +87,10 @@ export async function syncRecords(
           sort_order: i,
         });
       } else {
-        // Existing record — UPDATE
+        // Existing record — UPDATE (not upsert, to avoid GENERATED ALWAYS id issue)
         localIds.add(r.id);
-        toUpsert.push({
+        toUpdate.push({
           id: r.id,
-          project_id: projectId,
           diameter: r.diameter,
           species: r.species,
           location: r.location,
@@ -112,15 +110,21 @@ export async function syncRecords(
     // 9. Execute operations
     const errors: string[] = [];
 
-    // Upsert existing records
-    if (toUpsert.length > 0) {
-      const { error } = await supabase
-        .from('tree_records')
-        .upsert(toUpsert, { onConflict: 'id' });
-      if (error) {
-        console.error('syncEngine upsert:', error);
-        errors.push(error.message);
-      }
+    // Update existing records (개별 UPDATE — id가 GENERATED ALWAYS이므로 upsert 불가)
+    if (toUpdate.length > 0) {
+      const updatePromises = toUpdate.map(({ id, ...data }) =>
+        supabase
+          .from('tree_records')
+          .update(data)
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('syncEngine update id=' + id + ':', error);
+              errors.push(error.message);
+            }
+          }),
+      );
+      await Promise.all(updatePromises);
     }
 
     // Insert new records
