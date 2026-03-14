@@ -15,6 +15,7 @@ interface HistoryEvent {
   timestamp: string;
   entries: HistoryEntry[];
   summary: string;
+  totalRecords?: number;
 }
 
 interface Props {
@@ -26,22 +27,46 @@ interface Props {
 function groupIntoEvents(entries: HistoryEntry[]): HistoryEvent[] {
   if (entries.length === 0) return [];
 
-  const events: HistoryEvent[] = [];
-  let currentGroup: HistoryEntry[] = [entries[0]];
-  let groupTime = new Date(entries[0].created_at).getTime();
+  // entries are in DESC order. Reverse to process chronologically for counting.
+  const chronological = [...entries].reverse();
 
-  for (let i = 1; i < entries.length; i++) {
-    const entryTime = new Date(entries[i].created_at).getTime();
-    // Group entries within 3 seconds
+  // Track active record IDs
+  const activeRecords = new Set<number>();
+
+  const groups: HistoryEntry[][] = [];
+  let currentGroup: HistoryEntry[] = [chronological[0]];
+  let groupTime = new Date(chronological[0].created_at).getTime();
+
+  for (let i = 1; i < chronological.length; i++) {
+    const entryTime = new Date(chronological[i].created_at).getTime();
     if (Math.abs(entryTime - groupTime) <= 3000) {
-      currentGroup.push(entries[i]);
+      currentGroup.push(chronological[i]);
     } else {
-      events.push(buildEvent(currentGroup));
-      currentGroup = [entries[i]];
+      groups.push(currentGroup);
+      currentGroup = [chronological[i]];
       groupTime = entryTime;
     }
   }
-  events.push(buildEvent(currentGroup));
+  groups.push(currentGroup);
+
+  // Build events with running total
+  const events: HistoryEvent[] = [];
+  for (const group of groups) {
+    for (const entry of group) {
+      if (entry.action === 'insert' || entry.action === 'restore') {
+        activeRecords.add(entry.record_id);
+      } else if (entry.action === 'delete') {
+        activeRecords.delete(entry.record_id);
+      }
+      // update doesn't change count
+    }
+    const ev = buildEvent(group);
+    ev.totalRecords = activeRecords.size;
+    events.push(ev);
+  }
+
+  // Reverse back to DESC order for display
+  events.reverse();
   return events;
 }
 
@@ -197,6 +222,11 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                   {event.summary}
                 </div>
+                {event.totalRecords != null && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    총 {event.totalRecords}건
+                  </div>
+                )}
                 <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                   {formatTime(event.timestamp)}
                 </div>

@@ -57,9 +57,10 @@ interface Props {
   records: TreeRecord[];
   setRecords: React.Dispatch<React.SetStateAction<TreeRecord[]>>;
   projectName?: string;
+  disabled?: boolean;
 }
 
-export default function InputTab({ records, setRecords, projectName }: Props) {
+export default function InputTab({ records, setRecords, projectName, disabled = false }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
   const shouldScroll = useRef(false);
@@ -363,8 +364,9 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
       <div className="mb-4 hidden sm:flex sm:items-center gap-3">
         <button
           onClick={addRow}
+          disabled={disabled}
           className="bg-green-600 text-white px-4 py-2 rounded-lg text-base font-medium
-            active:bg-green-700 cursor-pointer"
+            active:bg-green-700 cursor-pointer disabled:opacity-50"
         >
           + 행 추가
         </button>
@@ -522,6 +524,14 @@ export default function InputTab({ records, setRecords, projectName }: Props) {
           + 행 추가
         </button>
       </div>
+
+      {disabled && (
+        <div className="fixed inset-0 z-[90] bg-black/20 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 px-6 py-3 rounded-xl shadow-lg text-sm font-medium text-gray-700 dark:text-gray-200">
+            이력 복원 중...
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ let syncInProgress = false;
 
 interface SyncResult {
   status: SyncStatus;
-  updatedRecords?: TreeRecord[];
+  idMappings?: Array<{ tempId: number; realId: number }>;
   error?: string;
 }
 
@@ -153,16 +153,18 @@ export async function syncRecords(
       }
     }
 
-    // 10. Build updated records with real DB ids
+    // 10. Build ID mappings for newly inserted records
+    const idMappings: Array<{ tempId: number; realId: number }> = [];
     let insertIdx = 0;
-    const updatedRecords = localRecords.map((r) => {
+    for (const r of localRecords) {
       if (r._isNew || !serverMap.has(r.id)) {
-        const newId = insertedRows[insertIdx]?.id ?? r.id;
+        const realId = insertedRows[insertIdx]?.id;
+        if (realId != null && realId !== r.id) {
+          idMappings.push({ tempId: r.id, realId });
+        }
         insertIdx++;
-        return { ...r, id: newId, _isNew: undefined };
       }
-      return { ...r, _isNew: undefined };
-    });
+    }
 
     // 11. Clear offline queue on success
     if (errors.length === 0) {
@@ -171,7 +173,7 @@ export async function syncRecords(
 
     return {
       status: errors.length > 0 ? 'error' : 'synced',
-      updatedRecords,
+      idMappings: idMappings.length > 0 ? idMappings : undefined,
       error: errors.length > 0 ? errors.join('; ') : undefined,
     };
   } catch (err) {

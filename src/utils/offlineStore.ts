@@ -3,13 +3,76 @@ import type { TreeRecord } from '../types';
 const BACKUP_PREFIX = 'papa_backup_';
 const QUEUE_KEY = 'papa_offline_queue';
 
-/** Save records to localStorage as backup */
-export function backupRecords(projectId: string, records: TreeRecord[]): void {
+const IDB_NAME = 'papa_backup_db';
+const IDB_STORE = 'records';
+const IDB_VERSION = 1;
+
+function openIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbBackup(projectId: string, records: TreeRecord[]): Promise<void> {
   try {
-    localStorage.setItem(`${BACKUP_PREFIX}${projectId}`, JSON.stringify(records));
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(records, `backup_${projectId}`);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
   } catch {
-    // localStorage full — silently fail
+    // IndexedDB not available — ignore
   }
+}
+
+export async function restoreFromIDB(projectId: string): Promise<TreeRecord[] | null> {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(`backup_${projectId}`);
+    return new Promise((resolve) => {
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Save records to localStorage as backup (with IndexedDB double backup) */
+export function backupRecords(projectId: string, records: TreeRecord[]): void {
+  const key = `${BACKUP_PREFIX}${projectId}`;
+  const json = JSON.stringify(records);
+  try {
+    localStorage.setItem(key, json);
+  } catch {
+    // localStorage full — clean old backups and retry
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(BACKUP_PREFIX) && k !== key) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem(key, json);
+    } catch {
+      console.warn('localStorage backup failed even after cleanup for', projectId);
+    }
+  }
+  // Double backup to IndexedDB (fire-and-forget)
+  idbBackup(projectId, records);
 }
 
 /** Restore records from localStorage backup */
@@ -35,14 +98,25 @@ interface QueuedChange {
 
 /** Queue changes for later sync (when offline) */
 export function queueOfflineChange(projectId: string, records: TreeRecord[]): void {
+  const queue = getOfflineQueue();
+  const filtered = queue.filter((q) => q.projectId !== projectId);
+  filtered.push({ projectId, records, timestamp: Date.now() });
+  const json = JSON.stringify(filtered);
   try {
-    const queue = getOfflineQueue();
-    // Replace existing entry for same project
-    const filtered = queue.filter((q) => q.projectId !== projectId);
-    filtered.push({ projectId, records, timestamp: Date.now() });
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(filtered));
+    localStorage.setItem(QUEUE_KEY, json);
   } catch {
-    // localStorage full
+    // Clean old backups and retry
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(BACKUP_PREFIX)) {
+          localStorage.removeItem(k);
+        }
+      }
+      localStorage.setItem(QUEUE_KEY, json);
+    } catch {
+      console.warn('localStorage queue failed even after cleanup');
+    }
   }
 }
 

@@ -53,7 +53,8 @@ export default function App() {
       .from('tree_records')
       .select('*')
       .is('deleted_at', null)
-      .order('sort_order', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .range(0, 9999);
     if (recordsError) console.error('loadProjects records:', recordsError);
 
     const recordsByProject = new Map<string, TreeRecord[]>();
@@ -109,21 +110,28 @@ export default function App() {
       setSyncStatus(result.status);
       if (result.error) setSyncError(result.error);
 
-      // 새로 INSERT된 레코드가 있을 때만 ID 업데이트 (무한 루프 방지)
-      if (result.updatedRecords) {
-        const hasNewIds = result.updatedRecords.some(
-          (r, i) => r.id !== records[i]?.id,
+      // Only patch temp IDs → real IDs (never replace entire state)
+      if (result.idMappings && result.idMappings.length > 0) {
+        const map = new Map(result.idMappings.map((m) => [m.tempId, m.realId]));
+        dirtyRef.current = false; // ID patch is not a user edit
+        setProjects((prev) =>
+          prev.map((p) => {
+            if (p.id !== projectId) return p;
+            return {
+              ...p,
+              records: p.records.map((r) => {
+                const realId = map.get(r.id);
+                return realId != null ? { ...r, id: realId, _isNew: undefined } : r;
+              }),
+            };
+          }),
         );
-        if (hasNewIds) {
-          dirtyRef.current = false; // ID 업데이트는 사용자 수정이 아님
-          setProjects((prev) =>
-            prev.map((p) =>
-              p.id === projectId ? { ...p, records: result.updatedRecords! } : p,
-            ),
-          );
-        }
       }
-      dirtyRef.current = false;
+
+      // Keep dirtyRef true if there were errors (for retry)
+      if (result.status !== 'error') {
+        dirtyRef.current = false;
+      }
     },
     [],
   );
@@ -204,6 +212,13 @@ export default function App() {
     if (!target) return;
     if (!confirm(`"${target.name}" 프로젝트를 삭제하시겠습니까?\n(데이터 ${target.records.length}건 포함)`))
       return;
+    // Soft delete tree_records first to avoid CASCADE/trigger conflicts
+    const { error: recError } = await supabase
+      .from('tree_records')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('project_id', id)
+      .is('deleted_at', null);
+    if (recError) console.error('deleteProject records:', recError);
     const { error } = await supabase.from('projects').delete().eq('id', id);
     if (error) console.error('deleteProject:', error);
     setProjects((prev) => prev.filter((p) => p.id !== id));
@@ -385,7 +400,7 @@ export default function App() {
         </div>
 
         {activeTab === 'input' ? (
-          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} />
+          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory} />
         ) : (
           <ResultTab records={selected.records} projectName={selected.name} />
         )}
