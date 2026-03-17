@@ -60,6 +60,7 @@ export async function syncChanges(
           diameter: r.diameter,
           species: r.species,
           location: r.location,
+          note: r.note ?? '',
           sort_order: sortOrder >= 0 ? sortOrder : idx,
         };
       });
@@ -79,6 +80,7 @@ export async function syncChanges(
               diameter: rec.diameter,
               species: rec.species,
               location: rec.location,
+              note: rec.note,
               sort_order: rec.sort_order,
             })
             .eq('id', rec.id)
@@ -103,6 +105,7 @@ export async function syncChanges(
           diameter: r.diameter,
           species: r.species,
           location: r.location,
+          note: r.note ?? '',
           sort_order: sortOrder >= 0 ? sortOrder : 0,
         };
       });
@@ -139,7 +142,36 @@ export async function syncChanges(
       }
     });
 
-    // 9. Clear offline queue on success
+    // 9. Update sort_order for ALL records (after inserts/deletes may have changed positions)
+    if (changes.allRecords.length > 0) {
+      const tempToReal = new Map(idMappings.map(m => [m.tempId, m.realId]));
+      const sortPayload: Array<{ id: number; sort_order: number }> = [];
+
+      for (let i = 0; i < changes.allRecords.length; i++) {
+        const r = changes.allRecords[i];
+        const realId = tempToReal.get(r.id);
+        if (realId != null) {
+          // 새로 INSERT된 레코드 (tempId → realId)
+          sortPayload.push({ id: realId, sort_order: i });
+        } else if (!r._isNew) {
+          // 기존 레코드
+          sortPayload.push({ id: r.id, sort_order: i });
+        }
+      }
+
+      if (sortPayload.length > 0) {
+        const { error } = await supabase.rpc('batch_update_sort_order', {
+          p_project_id: projectId,
+          p_records: sortPayload,
+        });
+        if (error) {
+          console.error('syncEngine sort_order update:', error);
+          // Non-fatal: sort_order is cosmetic, don't fail the whole sync
+        }
+      }
+    }
+
+    // 10. Clear offline queue on success
     if (errors.length === 0) {
       removeFromQueue(projectId);
     }

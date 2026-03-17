@@ -58,9 +58,12 @@ interface Props {
   setRecords: React.Dispatch<React.SetStateAction<TreeRecord[]>>;
   projectName?: string;
   disabled?: boolean;
+  onSave?: () => void;
+  isDirty?: boolean;
+  syncStatus?: string;
 }
 
-export default function InputTab({ records, setRecords, projectName, disabled = false }: Props) {
+export default function InputTab({ records, setRecords, projectName, disabled = false, onSave, isDirty, syncStatus }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
   const shouldScroll = useRef(false);
@@ -90,6 +93,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
         diameter: 0,
         species: '',
         location: lastRecord?.location ?? '',
+        note: '',
         _isNew: true,
       },
     ]);
@@ -298,6 +302,19 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       {/* 내보내기 버튼 */}
       {records.length > 0 && (
         <div className="flex items-center gap-2 mb-3">
+          {onSave && (
+            <button
+              onClick={onSave}
+              disabled={!isDirty || syncStatus === 'syncing'}
+              className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+                isDirty
+                  ? 'bg-blue-600 text-white active:bg-blue-700'
+                  : 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+              } disabled:opacity-50`}
+            >
+              {syncStatus === 'syncing' ? '저장 중...' : isDirty ? '저장' : '저장됨'}
+            </button>
+          )}
           <button
             onClick={downloadPng}
             disabled={exporting}
@@ -345,6 +362,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
               <th style={{ ...thStyle, minWidth: '80px' }}>흉고직경(cm)</th>
               <th style={{ ...thStyle, minWidth: '80px' }}>수종</th>
               <th style={{ ...thStyle, minWidth: '120px' }}>위치</th>
+              <th style={{ ...thStyle, minWidth: '100px' }}>비고</th>
             </tr>
           </thead>
           <tbody>
@@ -354,14 +372,15 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 <td style={{ ...cellStyle, color: '#1f2937' }}>{r.diameter || ''}</td>
                 <td style={{ ...cellStyle, color: '#1f2937' }}>{r.species}</td>
                 <td style={{ ...cellStyle, color: '#1f2937', textAlign: 'left' }}>{r.location}</td>
+                <td style={{ ...cellStyle, color: '#1f2937', textAlign: 'left' }}>{r.note ?? ''}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* 데스크톱: 상단 버튼 */}
-      <div className="mb-4 hidden sm:flex sm:items-center gap-3">
+      {/* 데스크톱: 상단 버튼 (스크롤 시 고정) */}
+      <div className="mb-4 hidden sm:flex sm:items-center gap-3 sticky top-0 z-40 bg-gray-50 dark:bg-gray-900 py-2 -mt-2">
         <button
           onClick={addRow}
           disabled={disabled}
@@ -429,6 +448,19 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 ✕
               </button>
             </div>
+            {/* 비고 */}
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-5 shrink-0" />
+              <input
+                type="text"
+                value={r.note ?? ''}
+                onChange={(e) => updateRecord(r.id, 'note', e.target.value)}
+                className="flex-1 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded text-xs
+                  bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-gray-300
+                  placeholder:text-gray-300 dark:placeholder:text-gray-500"
+                placeholder="비고"
+              />
+            </div>
           </div>
         ))}
         <div ref={bottomRef} />
@@ -443,13 +475,14 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
               <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 w-28 text-gray-700 dark:text-gray-300">흉고직경(cm)</th>
               <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 w-36 text-gray-700 dark:text-gray-300">수종</th>
               <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-700 dark:text-gray-300">위치</th>
+              <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-700 dark:text-gray-300">비고</th>
               <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 w-16 text-gray-700 dark:text-gray-300">삭제</th>
             </tr>
           </thead>
           <tbody>
             {records.length === 0 && (
               <tr>
-                <td colSpan={5} className="border border-gray-300 dark:border-gray-600 px-3 py-8 text-gray-400 dark:text-gray-500 text-center">
+                <td colSpan={6} className="border border-gray-300 dark:border-gray-600 px-3 py-8 text-gray-400 dark:text-gray-500 text-center">
                   데이터가 없습니다. "행 추가" 버튼을 눌러주세요.
                 </td>
               </tr>
@@ -491,6 +524,16 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                     placeholder="위치 입력"
                   />
                 </td>
+                <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
+                  <input
+                    type="text"
+                    value={r.note ?? ''}
+                    onChange={(e) => updateRecord(r.id, 'note', e.target.value)}
+                    className="w-full px-2 py-1 border-0 outline-none bg-transparent
+                      text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+                    placeholder="비고"
+                  />
+                </td>
                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1 text-center">
                   <button
                     onClick={() => removeRow(r.id)}
@@ -516,13 +559,28 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
             <span key={it.label} className={`px-2 py-0.5 rounded border ${it.cls} dark:text-gray-300`}>{it.label}</span>
           ))}
         </div>
-        <button
-          onClick={addRow}
-          className="w-full bg-green-600 text-white py-3.5 rounded-xl text-base font-medium
-            active:bg-green-700 cursor-pointer"
-        >
-          + 행 추가
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={addRow}
+            className="flex-1 bg-green-600 text-white py-3.5 rounded-xl text-base font-medium
+              active:bg-green-700 cursor-pointer"
+          >
+            + 행 추가
+          </button>
+          {onSave && (
+            <button
+              onClick={onSave}
+              disabled={!isDirty || syncStatus === 'syncing'}
+              className={`px-6 py-3.5 rounded-xl text-base font-medium cursor-pointer transition-colors ${
+                isDirty
+                  ? 'bg-blue-600 text-white active:bg-blue-700'
+                  : 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+              } disabled:opacity-50`}
+            >
+              {syncStatus === 'syncing' ? '저장 중...' : isDirty ? '저장' : '✓'}
+            </button>
+          )}
+        </div>
       </div>
 
       {disabled && (

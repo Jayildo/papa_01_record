@@ -33,6 +33,7 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   // dirty 플래그: 사용자가 실제로 데이터를 수정했을 때만 true
   const dirtyRef = useRef(false);
+  const [isDirty, setIsDirty] = useState(false);
   // 변경 추적: 실제 변경된 레코드만 sync
   const pendingRef = useRef<PendingChanges>({
     updates: new Map(),
@@ -73,6 +74,7 @@ export default function App() {
         diameter: Number(r.diameter),
         species: r.species as TreeRecord['species'],
         location: r.location,
+        note: r.note ?? '',
       });
       recordsByProject.set(r.project_id, list);
     }
@@ -98,6 +100,7 @@ export default function App() {
   const setRecords = useCallback(
     (updater: TreeRecord[] | ((prev: TreeRecord[]) => TreeRecord[])) => {
       dirtyRef.current = true;
+      setIsDirty(true);
       setProjects((prev) =>
         prev.map((p) => {
           if (p.id !== selectedId) return p;
@@ -132,7 +135,7 @@ export default function App() {
             } else {
               // 기존 레코드 수정
               const old = oldRecords.find((o) => o.id === r.id);
-              if (old && (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location)) {
+              if (old && (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location || (old.note ?? '') !== (r.note ?? ''))) {
                 pending.updates.set(r.id, r);
               }
             }
@@ -172,6 +175,7 @@ export default function App() {
       if (result.idMappings && result.idMappings.length > 0) {
         const map = new Map(result.idMappings.map((m) => [m.tempId, m.realId]));
         dirtyRef.current = false;
+        setIsDirty(false);
         setProjects((prev) =>
           prev.map((p) => {
             if (p.id !== projectId) return p;
@@ -187,7 +191,7 @@ export default function App() {
       }
 
       // 에러 시 변경분 복원 (재시도용)
-      if (result.status === 'error') {
+      if (result.status === 'error' || result.status === 'syncing') {
         const p = pendingRef.current;
         changes.updates.forEach((v, k) => { if (!p.updates.has(k)) p.updates.set(k, v); });
         changes.inserts.forEach((ins) => {
@@ -198,6 +202,7 @@ export default function App() {
         });
       } else {
         dirtyRef.current = false;
+        setIsDirty(false);
       }
     },
     [],
@@ -207,6 +212,7 @@ export default function App() {
     (restoredRecords: TreeRecord[]) => {
       if (!selectedId) return;
       dirtyRef.current = true;
+      setIsDirty(true);
       // 복원은 전체 교체 → pending 초기화, full sync로 처리
       pendingRef.current = {
         updates: new Map(),
@@ -223,15 +229,11 @@ export default function App() {
     [selectedId],
   );
 
-  // 디바운스된 저장 — dirty일 때만 (DB에서 방금 로드한 데이터는 sync 안 함)
-  useEffect(() => {
+  // 수동 저장
+  const handleSave = useCallback(() => {
     if (!selected || !dirtyRef.current) return;
-    const timer = setTimeout(() => {
-      doSync(selected.records, selected.id);
-    }, 3000);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.records]);
+    doSync(selected.records, selected.id);
+  }, [selected, doSync]);
 
   // 온라인/오프라인 감지
   useEffect(() => {
@@ -474,7 +476,7 @@ export default function App() {
         </div>
 
         {activeTab === 'input' ? (
-          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory} />
+          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory} onSave={handleSave} isDirty={isDirty} syncStatus={syncStatus} />
         ) : (
           <ResultTab records={selected.records} projectName={selected.name} />
         )}

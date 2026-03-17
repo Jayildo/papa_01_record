@@ -169,6 +169,7 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
           diameter: Number(d.diameter) || 0,
           species: (d.species as TreeRecord['species']) || '',
           location: (d.location as string) || '',
+          note: (d.note as string) ?? '',
         });
       }
 

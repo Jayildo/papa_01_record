@@ -3,6 +3,7 @@ export interface TreeRecord {
   diameter: number;
   species: '낙엽수' | '상록수' | '';
   location: string;
+  note?: string;  // 비고
   updated_at?: string;
   _isNew?: boolean;
 }
