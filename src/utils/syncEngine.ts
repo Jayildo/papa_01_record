@@ -87,7 +87,7 @@ export async function syncChanges(
             .then(({ error: e }) => {
               if (e) {
                 console.error('syncEngine fallback update id=' + rec.id + ':', e);
-                errors.push(e.message);
+                errors.push('수정 실패 (id=' + rec.id + '): ' + e.message);
               }
             }),
         );
@@ -116,7 +116,7 @@ export async function syncChanges(
         .select('id');
       if (error) {
         console.error('syncEngine insert:', error);
-        errors.push(error.message);
+        errors.push('추가 실패: ' + error.message);
       }
       insertedRows = data ?? [];
     }
@@ -129,7 +129,7 @@ export async function syncChanges(
         .in('id', changes.deletes);
       if (error) {
         console.error('syncEngine softDelete:', error);
-        errors.push(error.message);
+        errors.push('삭제 실패: ' + error.message);
       }
     }
 
@@ -273,7 +273,12 @@ export async function flushOfflineQueue(
   for (const entry of queue) {
     const current = getRecords(entry.projectId);
     if (current) {
-      await syncRecords(current, entry.projectId);
+      const result = await syncRecords(current, entry.projectId);
+      if (result.status === 'error' || result.status === 'offline') {
+        // Stop flushing - connection may be unstable
+        console.warn('flushOfflineQueue: stopping due to', result.status);
+        break;
+      }
     }
   }
 }

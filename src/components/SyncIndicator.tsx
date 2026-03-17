@@ -15,7 +15,7 @@ interface Props {
 export default function SyncIndicator({ status, errorMsg }: Props) {
   const { color, label } = CONFIG[status];
   return (
-    <div className="flex items-center gap-1.5" title={errorMsg || label}>
+    <div className="flex items-center gap-1.5" title={errorMsg || label} role="status" aria-live="polite">
       <span className={`w-2 h-2 rounded-full ${color}`} />
       <span className="text-xs text-gray-500 dark:text-gray-400">
         {status === 'error' && errorMsg ? `오류: ${errorMsg}` : label}

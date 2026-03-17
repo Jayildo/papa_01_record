@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import type { Project, TreeRecord, SyncStatus } from './types';
 import { supabase } from './lib/supabase';
 import { syncChanges, syncRecords, flushOfflineQueue } from './utils/syncEngine';
@@ -8,6 +9,36 @@ import ResultTab from './components/ResultTab';
 import PinScreen, { isAuthed } from './components/PinScreen';
 import SyncIndicator from './components/SyncIndicator';
 import HistoryPanel from './components/HistoryPanel';
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('ErrorBoundary:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-dvh flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+          <h1 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">오류가 발생했습니다</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-4 text-center">{this.state.error}</p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: '' }); window.location.reload(); }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer active:bg-blue-700"
+          >
+            새로고침
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const DARK_KEY = 'papa_01_dark';
 
@@ -19,7 +50,7 @@ function loadDark(): boolean {
 
 type Tab = 'input' | 'result';
 
-export default function App() {
+function AppContent() {
   const [authed, setAuthed] = useState(isAuthed);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -47,6 +78,37 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem(DARK_KEY, String(dark));
   }, [dark]);
+
+  // 미저장 변경사항 브라우저 닫기/새로고침 경고
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  // 브라우저 뒤로가기 버튼 처리 (History API)
+  useEffect(() => {
+    if (selectedId) {
+      window.history.pushState({ projectId: selectedId }, '');
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
+    const handler = (_e: PopStateEvent) => {
+      if (selectedId) {
+        if (isDirty && !confirm('저장되지 않은 변경사항이 있습니다.\n정말 나가시겠습니까?')) {
+          window.history.pushState({ projectId: selectedId }, '');
+          return;
+        }
+        setSelectedId(null);
+      }
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [selectedId, isDirty]);
 
   // 프로젝트 목록 로드
   const loadProjects = useCallback(async () => {
@@ -314,6 +376,7 @@ export default function App() {
         dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600
         transition-colors text-lg shrink-0"
       title={dark ? '라이트 모드' : '다크 모드'}
+      aria-label={dark ? '라이트 모드' : '다크 모드'}
     >
       {dark ? '☀️' : '🌙'}
     </button>
@@ -438,12 +501,16 @@ export default function App() {
       <div className="max-w-6xl mx-auto p-4">
         <div className="flex items-center gap-3 mb-4">
           <button
-            onClick={() => setSelectedId(null)}
+            onClick={() => {
+              if (isDirty && !confirm('저장되지 않은 변경사항이 있습니다.\n정말 나가시겠습니까?')) return;
+              setSelectedId(null);
+            }}
             className="w-10 h-10 flex items-center justify-center rounded-full cursor-pointer
               text-gray-400 hover:bg-gray-100 active:bg-gray-200
               dark:hover:bg-gray-700 dark:active:bg-gray-600
               transition-colors text-lg shrink-0"
             title="프로젝트 목록"
+            aria-label="프로젝트 목록으로 돌아가기"
           >
             ←
           </button>
@@ -460,17 +527,18 @@ export default function App() {
               dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600
               transition-colors text-lg shrink-0"
             title="변경 이력"
+            aria-label="변경 이력"
           >
             ↺
           </button>
           {darkToggle}
         </div>
 
-        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
-          <button className={tabClass('input')} onClick={() => setActiveTab('input')}>
+        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4" role="tablist">
+          <button className={tabClass('input')} onClick={() => setActiveTab('input')} role="tab" aria-selected={activeTab === 'input'}>
             입력
           </button>
-          <button className={tabClass('result')} onClick={() => setActiveTab('result')}>
+          <button className={tabClass('result')} onClick={() => setActiveTab('result')} role="tab" aria-selected={activeTab === 'result'}>
             결과 ({validCount}건)
           </button>
         </div>
@@ -490,5 +558,13 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }

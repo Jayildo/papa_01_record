@@ -75,7 +75,22 @@ export default function ResultTab({ records, projectName }: Props) {
   }
 
   const result = aggregate(validRecords);
-  const fileName = projectName ? `${projectName}_집계` : '수목_전정_현황';
+  const fileName = (projectName ? `${projectName}_집계` : '수목_전정_현황').replace(/[/\\:*?"<>|]/g, '_');
+
+  const downloadCsv = () => {
+    const header = '순번,흉고직경(cm),수종,위치,비고';
+    const rows = validRecords.map((r, i) =>
+      `${i + 1},${r.diameter},${r.species},${r.location.replace(/,/g, ' ')},${(r.note ?? '').replace(/,/g, ' ')}`
+    );
+    const csv = '\uFEFF' + [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const safeName = (projectName ?? '수목_데이터').replace(/[/\\:*?"<>|]/g, '_');
+    link.download = `${safeName}_집계.csv`;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   const captureTable = async (): Promise<HTMLCanvasElement> => {
     const el = tableRef.current!;
@@ -283,6 +298,14 @@ export default function ResultTab({ records, projectName }: Props) {
             cursor-pointer active:bg-violet-700 disabled:opacity-50"
         >
           공유
+        </button>
+        <button
+          onClick={downloadCsv}
+          aria-label="CSV 다운로드"
+          className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium
+            cursor-pointer active:bg-gray-700 disabled:opacity-50"
+        >
+          CSV
         </button>
 
         <div className="flex items-center gap-1 ml-auto

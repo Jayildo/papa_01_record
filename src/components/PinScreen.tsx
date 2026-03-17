@@ -1,6 +1,5 @@
 import { useState } from 'react';
 
-const PIN = import.meta.env.VITE_APP_PIN || '1124';
 const SESSION_KEY = 'papa_01_authed';
 
 export function isAuthed(): boolean {
@@ -11,6 +10,22 @@ export function setAuthed() {
   sessionStorage.setItem(SESSION_KEY, 'true');
 }
 
+async function verifyPin(input: string): Promise<boolean> {
+  // If hash is set, use hash comparison (secure)
+  const pinHash = import.meta.env.VITE_APP_PIN_HASH;
+  if (pinHash) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(input);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hash === pinHash;
+  }
+  // Fallback: direct comparison (legacy)
+  const pin = import.meta.env.VITE_APP_PIN || '1124';
+  return input === pin;
+}
+
 interface Props {
   onSuccess: () => void;
 }
@@ -19,8 +34,9 @@ export default function PinScreen({ onSuccess }: Props) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
 
-  const submit = () => {
-    if (pin === PIN) {
+  const submit = async () => {
+    const ok = await verifyPin(pin);
+    if (ok) {
       setAuthed();
       onSuccess();
     } else {

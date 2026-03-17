@@ -140,7 +140,8 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
         .select('*')
         .eq('project_id', projectId)
         .lte('created_at', endTime)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(5000);
 
       if (error) {
         console.error('Restore fetch:', error);
