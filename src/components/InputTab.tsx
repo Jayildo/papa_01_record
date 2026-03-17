@@ -410,7 +410,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
               diameterColor(r.diameter) || 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
             }`}
           >
-            {/* 1줄: 순번 | 직경 | 수종 | 삭제 */}
+            {/* 1줄: 순번 | 직경 | 수종 | 위치 | 비고 | 삭제 */}
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-bold text-gray-400 dark:text-gray-500 w-5 text-center shrink-0">
                 {idx + 1}
@@ -436,10 +436,19 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 value={r.location}
                 options={locationOptions}
                 onChange={(v) => updateRecord(r.id, 'location', v)}
-                className="flex-1 min-w-16 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm
+                className="min-w-12 max-w-20 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm
                   bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                   placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 placeholder="위치"
+              />
+              <input
+                type="text"
+                value={r.note ?? ''}
+                onChange={(e) => updateRecord(r.id, 'note', e.target.value)}
+                className="flex-1 min-w-12 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm
+                  bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-gray-300
+                  placeholder:text-gray-300 dark:placeholder:text-gray-500"
+                placeholder="비고"
               />
               <button
                 onClick={() => removeRow(r.id)}
@@ -447,19 +456,6 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
               >
                 ✕
               </button>
-            </div>
-            {/* 비고 */}
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="w-5 shrink-0" />
-              <input
-                type="text"
-                value={r.note ?? ''}
-                onChange={(e) => updateRecord(r.id, 'note', e.target.value)}
-                className="flex-1 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded text-xs
-                  bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-gray-300
-                  placeholder:text-gray-300 dark:placeholder:text-gray-500"
-                placeholder="비고"
-              />
             </div>
           </div>
         ))}
@@ -550,15 +546,10 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
         </table>
       </div>
 
-      {/* 모바일: 하단 고정 바 */}
+      {/* 모바일: 하단 고정 바 (행 추가 + 저장만) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur
         border-t border-gray-200 dark:border-gray-700 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]
         sm:hidden z-50">
-        <div className="flex flex-wrap justify-center gap-1.5 text-xs mb-2">
-          {legendItems.map((it) => (
-            <span key={it.label} className={`px-2 py-0.5 rounded border ${it.cls} dark:text-gray-300`}>{it.label}</span>
-          ))}
-        </div>
         <div className="flex gap-2">
           <button
             onClick={addRow}
