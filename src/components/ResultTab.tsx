@@ -364,17 +364,16 @@ export default function ResultTab({ records, projectName }: Props) {
           <table style={{ borderCollapse: 'collapse', fontSize: '13px', width: '100%' }}>
             <thead>
               <tr>
-                <th rowSpan={2} style={{ ...thStyle, minWidth: '70px' }}>위치</th>
+                <th rowSpan={2} style={{ ...thStyle, minWidth: '70px' }}>구분</th>
                 {SPECIES_LIST.map((sp) => (
                   <th
                     key={sp}
-                    colSpan={DIAMETER_RANGES.length + 1}
+                    colSpan={DIAMETER_RANGES.length}
                     style={thStyle}
                   >
                     {sp}
                   </th>
                 ))}
-                <th rowSpan={2} style={thStyle}>합계</th>
               </tr>
               <tr>
                 {SPECIES_LIST.map((sp) => (
@@ -384,7 +383,6 @@ export default function ResultTab({ records, projectName }: Props) {
                         {DIAMETER_LABELS[dr]}
                       </th>
                     ))}
-                    <th key={`${sp}-sub`} style={{ ...thSubStyle, fontWeight: 700 }}>소계</th>
                   </Fragment>
                 ))}
               </tr>
@@ -402,23 +400,14 @@ export default function ResultTab({ records, projectName }: Props) {
                           {row.counts[sp][dr] || ''}
                         </td>
                       ))}
-                      <td
-                        key={`${row.location}-${sp}-sub`}
-                        style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#f9fafb', color: '#1f2937' }}
-                      >
-                        {row.speciesSubtotals[sp] || ''}
-                      </td>
                     </Fragment>
                   ))}
-                  <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#eff6ff', color: '#1f2937' }}>
-                    {row.total}
-                  </td>
                 </tr>
               ))}
-              {/* 소계 행 */}
+              {/* 규격합계 행 */}
               <tr>
                 <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fefce8', textAlign: 'left', color: '#1f2937' }}>
-                  소계
+                  규격합계
                 </td>
                 {SPECIES_LIST.map((sp) => (
                   <Fragment key={sp}>
@@ -427,15 +416,33 @@ export default function ResultTab({ records, projectName }: Props) {
                         {result.columnTotals[sp][dr] || ''}
                       </td>
                     ))}
-                    <td
-                      key={`total-${sp}-sub`}
-                      style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fef9c3', color: '#1f2937' }}
-                    >
-                      {result.speciesTotals[sp]}
-                    </td>
                   </Fragment>
                 ))}
-                <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#dbeafe', color: '#1f2937' }}>
+              </tr>
+              {/* 수종합계 행 */}
+              <tr>
+                <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fef9c3', textAlign: 'left', color: '#1f2937' }}>
+                  수종합계
+                </td>
+                {SPECIES_LIST.map((sp) => (
+                  <td
+                    key={`species-total-${sp}`}
+                    colSpan={DIAMETER_RANGES.length}
+                    style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#fef9c3', color: '#1f2937' }}
+                  >
+                    {result.speciesTotals[sp]}
+                  </td>
+                ))}
+              </tr>
+              {/* 총계 행 */}
+              <tr>
+                <td style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#dbeafe', textAlign: 'left', color: '#1f2937' }}>
+                  총계
+                </td>
+                <td
+                  colSpan={SPECIES_LIST.length * DIAMETER_RANGES.length}
+                  style={{ ...cellStyle, fontWeight: 700, backgroundColor: '#dbeafe', color: '#1f2937' }}
+                >
                   {result.grandTotal}
                 </td>
               </tr>
