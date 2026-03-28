@@ -3,6 +3,8 @@ import type { ErrorInfo, ReactNode } from 'react';
 import type { Project, TreeRecord, SyncStatus } from './types';
 import { supabase } from './lib/supabase';
 import { syncChanges, syncRecords, flushOfflineQueue } from './utils/syncEngine';
+import { persistRecordsImmediate, persistProjectsImmediate, loadLocalProjects } from './utils/offlineStore';
+import { backupToGoogleSheets } from './utils/sheetsBackup';
 import type { PendingChanges } from './utils/syncEngine';
 import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
@@ -62,6 +64,10 @@ function AppContent() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const [syncError, setSyncError] = useState<string>('');
   const [showHistory, setShowHistory] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  // projects ref (doSync 등 콜백에서 최신 projects 참조용)
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
   // dirty 플래그: 사용자가 실제로 데이터를 수정했을 때만 true
   const dirtyRef = useRef(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -110,15 +116,32 @@ function AppContent() {
     return () => window.removeEventListener('popstate', handler);
   }, [selectedId, isDirty]);
 
-  // 프로젝트 목록 로드
+  // 프로젝트 목록 로드 (로컬 퍼스트: IndexedDB → Supabase 백그라운드 동기화)
   const loadProjects = useCallback(async () => {
+    // 1단계: 로컬 데이터 먼저 표시 (즉시)
+    const localProjects = await loadLocalProjects();
+    if (localProjects && localProjects.length > 0) {
+      setProjects(localProjects);
+      setLoading(false);
+    }
+
+    // 2단계: Supabase에서 최신 데이터 동기화
     const { data: projectRows, error: projectsError } = await supabase
       .from('projects')
       .select('*')
       .order('created_at', { ascending: true });
 
-    if (projectsError) console.error('loadProjects:', projectsError);
+    if (projectsError) {
+      console.error('loadProjects:', projectsError);
+      setLoadError('서버 연결 실패. 로컬 데이터를 표시합니다.');
+      if (!localProjects || localProjects.length === 0) {
+        setLoading(false);
+      }
+      return;
+    }
     if (!projectRows) { setLoading(false); return; }
+
+    setLoadError('');
 
     const { data: recordRows, error: recordsError } = await supabase
       .from('tree_records')
@@ -141,20 +164,30 @@ function AppContent() {
       recordsByProject.set(r.project_id, list);
     }
 
-    setProjects(
-      projectRows.map((p) => ({
-        id: p.id,
-        name: p.name,
-        records: recordsByProject.get(p.id) ?? [],
-        createdAt: p.created_at,
-      })),
-    );
+    const serverProjects = projectRows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      records: recordsByProject.get(p.id) ?? [],
+      createdAt: p.created_at,
+    }));
+
+    setProjects(serverProjects);
     setLoading(false);
+
+    // 서버 데이터를 로컬에 저장 (다음 로드 시 즉시 사용)
+    persistProjectsImmediate(serverProjects);
   }, []);
 
   useEffect(() => {
     if (authed) loadProjects();
   }, [authed, loadProjects]);
+
+  // 프로젝트 변경 시 로컬에 저장 (앱 시작 시 즉시 로드용)
+  useEffect(() => {
+    if (projects.length > 0) {
+      persistProjectsImmediate(projects);
+    }
+  }, [projects]);
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
 
@@ -204,6 +237,12 @@ function AppContent() {
           }
 
           pending.allRecords = newRecords;
+
+          // 매 입력마다 즉시 IndexedDB에 저장 (탭 닫혀도 데이터 유지)
+          if (selectedId) {
+            persistRecordsImmediate(selectedId, newRecords);
+          }
+
           return { ...p, records: newRecords };
         }),
       );
@@ -252,6 +291,14 @@ function AppContent() {
         );
       }
 
+      // 성공 시 Google Sheets 백업 (fire-and-forget)
+      if (result.status === 'synced') {
+        const proj = projectsRef.current.find(p => p.id === projectId);
+        if (proj) {
+          backupToGoogleSheets(changes.allRecords, proj.name);
+        }
+      }
+
       // 에러 시 변경분 복원 (재시도용)
       if (result.status === 'error' || result.status === 'syncing') {
         const p = pendingRef.current;
@@ -296,6 +343,44 @@ function AppContent() {
     if (!selected || !dirtyRef.current) return;
     doSync(selected.records, selected.id);
   }, [selected, doSync]);
+
+  // 자동 저장 (2초 디바운스)
+  useEffect(() => {
+    if (!isDirty || !selectedId) return;
+    const timer = setTimeout(() => {
+      const proj = projects.find(p => p.id === selectedId);
+      if (proj && dirtyRef.current) {
+        doSync(proj.records, proj.id);
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [isDirty, selectedId, projects, doSync]);
+
+  // 모바일: 앱 전환/화면 잠금 시 즉시 로컬 저장
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && selectedId) {
+        const proj = projects.find(p => p.id === selectedId);
+        if (proj) {
+          persistRecordsImmediate(selectedId, proj.records);
+        }
+      }
+    };
+    const handlePageHide = () => {
+      if (selectedId) {
+        const proj = projects.find(p => p.id === selectedId);
+        if (proj) {
+          persistRecordsImmediate(selectedId, proj.records);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [selectedId, projects]);
 
   // 온라인/오프라인 감지
   useEffect(() => {
@@ -391,6 +476,13 @@ function AppContent() {
     );
   }
 
+  // 서버 연결 실패 배너
+  const loadErrorBanner = loadError ? (
+    <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg px-3 py-2 mb-3 text-sm text-yellow-700 dark:text-yellow-300">
+      {loadError}
+    </div>
+  ) : null;
+
   // 프로젝트 목록 화면
   if (!selected) {
     return (
@@ -401,6 +493,7 @@ function AppContent() {
             {darkToggle}
           </div>
 
+          {loadErrorBanner}
           <div className="flex flex-col gap-2.5 mb-6">
             {projects.length === 0 && !showNewInput && (
               <p className="text-gray-400 dark:text-gray-500 py-12 text-center">
@@ -518,7 +611,7 @@ function AppContent() {
             <h1 className="text-lg font-bold truncate text-gray-900 dark:text-gray-100">
               {selected.name}
             </h1>
-            <SyncIndicator status={syncStatus} errorMsg={syncError} />
+            <SyncIndicator status={syncStatus} errorMsg={syncError} onRetry={handleSave} />
           </div>
           <button
             onClick={() => setShowHistory(true)}
