@@ -172,6 +172,13 @@ function AppContent() {
       createdAt: p.created_at,
     }));
 
+    // 사용자가 편집 중이면 서버 데이터로 덮어쓰지 않음 (데이터 유실 방지)
+    if (dirtyRef.current) {
+      console.warn('loadProjects: skipped server overwrite — local edits in progress');
+      setLoading(false);
+      return;
+    }
+
     setProjects(serverProjects);
     setLoading(false);
 
@@ -232,6 +239,11 @@ function AppContent() {
               // 기존 레코드 수정
               const old = oldRecords.find((o) => o.id === r.id);
               if (old && (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location || (old.note ?? '') !== (r.note ?? ''))) {
+                // diameter가 0으로 변경되는 건 의도하지 않은 덮어쓰기일 수 있음 — 방어
+                if (old.diameter > 0 && r.diameter === 0) {
+                  console.warn(`setRecords: blocked diameter→0 for id=${r.id} (was ${old.diameter})`);
+                  continue;
+                }
                 pending.updates.set(r.id, r);
               }
             }
