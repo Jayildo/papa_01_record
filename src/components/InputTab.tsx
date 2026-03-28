@@ -82,11 +82,19 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
     return result;
   }, [records]);
 
+  // 마지막 행이 미완성이면 행 추가 차단
+  const lastRecord = records[records.length - 1];
+  const lastRowIncomplete = !!lastRecord && (
+    lastRecord.diameter <= 0 || lastRecord.species === '' || !lastRecord.location.trim()
+  );
+
   const addRow = () => {
-    // 마지막 행의 수종이 선택되지 않았으면 차단 (직경 입력된 경우만)
-    const lastRecord = records[records.length - 1];
-    if (lastRecord && lastRecord.diameter > 0 && lastRecord.species === '') {
-      alert('수종을 선택해주세요.');
+    if (lastRowIncomplete) {
+      const missing: string[] = [];
+      if (lastRecord.diameter <= 0) missing.push('흉고직경');
+      if (lastRecord.species === '') missing.push('수종');
+      if (!lastRecord.location.trim()) missing.push('위치');
+      alert(`${missing.join(', ')}을(를) 입력해주세요.`);
       return;
     }
 
@@ -418,7 +426,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       <div className="mb-4 hidden sm:flex sm:items-center gap-3 sticky top-0 z-40 bg-gray-50 dark:bg-gray-900 py-2 -mt-2">
         <button
           onClick={addRow}
-          disabled={disabled}
+          disabled={disabled || lastRowIncomplete}
           className="bg-green-600 text-white px-4 py-2 rounded-lg text-base font-medium
             active:bg-green-700 cursor-pointer disabled:opacity-50"
         >
@@ -588,8 +596,9 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
         <div className="flex gap-2">
           <button
             onClick={addRow}
+            disabled={lastRowIncomplete}
             className="flex-1 bg-green-600 text-white py-3.5 rounded-xl text-base font-medium
-              active:bg-green-700 cursor-pointer"
+              active:bg-green-700 cursor-pointer disabled:opacity-50"
           >
             + 행 추가
           </button>
