@@ -65,6 +65,7 @@ function AppContent() {
   const [syncError, setSyncError] = useState<string>('');
   const [showHistory, setShowHistory] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [monthFilter, setMonthFilter] = useState<string | null>(null); // null = 전체, 'YY.MM' = 해당 월
   // projects ref (doSync 등 콜백에서 최신 projects 참조용)
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
@@ -485,22 +486,76 @@ function AppContent() {
 
   // 프로젝트 목록 화면
   if (!selected) {
+    // 월별 필터용: 프로젝트 생성일에서 고유 월 추출 (최신순)
+    const monthKeys = Array.from(
+      new Set(
+        projects.map((p) => {
+          const d = new Date(p.createdAt);
+          const yy = String(d.getFullYear()).slice(2);
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          return `${yy}.${mm}`;
+        }),
+      ),
+    ).sort((a, b) => b.localeCompare(a)); // 최신 월이 앞
+
+    // 필터링 + 최신순 정렬
+    const filteredProjects = (monthFilter
+      ? projects.filter((p) => {
+          const d = new Date(p.createdAt);
+          const yy = String(d.getFullYear()).slice(2);
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          return `${yy}.${mm}` === monthFilter;
+        })
+      : projects
+    ).slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
     return (
       <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
         <div className="max-w-lg mx-auto p-4">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-5">
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">수목 전정 현황</h1>
             {darkToggle}
           </div>
 
           {loadErrorBanner}
+
+          {/* 월별 필터 버튼 */}
+          {monthKeys.length > 0 && (
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+              <button
+                onClick={() => setMonthFilter(null)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold shrink-0 cursor-pointer transition-colors ${
+                  monthFilter === null
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 active:bg-gray-100 dark:active:bg-gray-700'
+                }`}
+              >
+                전체
+              </button>
+              {monthKeys.map((mk) => (
+                <button
+                  key={mk}
+                  onClick={() => setMonthFilter(mk)}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold shrink-0 cursor-pointer transition-colors ${
+                    monthFilter === mk
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 active:bg-gray-100 dark:active:bg-gray-700'
+                  }`}
+                >
+                  {mk}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 프로젝트 카드 목록 */}
           <div className="flex flex-col gap-2.5 mb-6">
-            {projects.length === 0 && !showNewInput && (
+            {filteredProjects.length === 0 && !showNewInput && (
               <p className="text-gray-400 dark:text-gray-500 py-12 text-center">
-                프로젝트가 없습니다.<br />새로 만들어주세요.
+                {monthFilter ? `${monthFilter}에 생성된 프로젝트가 없습니다.` : '프로젝트가 없습니다.'}<br />새로 만들어주세요.
               </p>
             )}
-            {projects.map((p) => {
+            {filteredProjects.map((p) => {
               const validCount = p.records.filter(
                 (r) => r.diameter > 0 && r.location.trim() && r.species !== '',
               ).length;
@@ -518,7 +573,7 @@ function AppContent() {
                   <div className="min-w-0">
                     <div className="font-medium truncate text-gray-900 dark:text-gray-100">{p.name}</div>
                     <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                      {validCount}건 &middot; {new Date(p.createdAt).toLocaleDateString()}
+                      <span className="text-blue-500 dark:text-blue-400 font-medium">{validCount}건</span> &middot; {new Date(p.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <button
