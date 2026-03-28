@@ -18,6 +18,7 @@ export async function backupToGoogleSheets(
     await fetch(SHEETS_URL, {
       method: 'POST',
       mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         projectName,
         records: records.map((r, idx) => ({
