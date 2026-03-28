@@ -95,7 +95,7 @@ export async function syncChanges(
       }
     }
 
-    // 6. INSERT new records (1 API call)
+    // 6. INSERT new records (chunked — 100건씩 분할하여 부분 실패 방지)
     let insertedRows: Array<{ id: number }> = [];
     if (changes.inserts.length > 0) {
       const toInsert = changes.inserts.map((r) => {
@@ -110,15 +110,27 @@ export async function syncChanges(
         };
       });
 
-      const { data, error } = await supabase
-        .from('tree_records')
-        .insert(toInsert)
-        .select('id');
-      if (error) {
-        console.error('syncEngine insert:', error);
-        errors.push('추가 실패: ' + error.message);
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
+        const chunk = toInsert.slice(i, i + CHUNK_SIZE);
+        const { data, error } = await supabase
+          .from('tree_records')
+          .insert(chunk)
+          .select('id');
+        if (error) {
+          console.error(`syncEngine insert chunk ${i / CHUNK_SIZE + 1}:`, error);
+          errors.push(`추가 실패 (${i + 1}~${i + chunk.length}건): ${error.message}`);
+        }
+        if (data) {
+          insertedRows.push(...data);
+        }
       }
-      insertedRows = data ?? [];
+
+      // 응답 건수 검증
+      if (insertedRows.length < changes.inserts.length) {
+        const missing = changes.inserts.length - insertedRows.length;
+        errors.push(`${changes.inserts.length}건 중 ${insertedRows.length}건만 저장됨 (${missing}건 누락)`);
+      }
     }
 
     // 7. Soft DELETE (1 API call)
@@ -274,10 +286,15 @@ export async function flushOfflineQueue(
     const current = getRecords(entry.projectId);
     if (current) {
       const result = await syncRecords(current, entry.projectId);
-      if (result.status === 'error' || result.status === 'offline') {
-        // Stop flushing - connection may be unstable
-        console.warn('flushOfflineQueue: stopping due to', result.status);
+      if (result.status === 'offline') {
+        // Truly offline — stop trying
+        console.warn('flushOfflineQueue: stopping — offline');
         break;
+      }
+      if (result.status === 'error') {
+        // This project failed, but try the next one
+        console.warn('flushOfflineQueue: skipping', entry.projectId, 'due to error');
+        continue;
       }
     }
   }

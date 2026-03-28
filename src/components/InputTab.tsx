@@ -83,15 +83,21 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   }, [records]);
 
   const addRow = () => {
-    const nextId = records.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+    // 마지막 행의 수종이 선택되지 않았으면 차단 (직경 입력된 경우만)
     const lastRecord = records[records.length - 1];
+    if (lastRecord && lastRecord.diameter > 0 && lastRecord.species === '') {
+      alert('수종을 선택해주세요.');
+      return;
+    }
+
+    const nextId = records.reduce((max, r) => Math.max(max, r.id), 0) + 1;
     shouldScroll.current = true;
     setRecords([
       ...records,
       {
         id: nextId,
         diameter: 0,
-        species: '',
+        species: lastRecord?.species ?? '',
         location: lastRecord?.location ?? '',
         note: '',
         _isNew: true,
