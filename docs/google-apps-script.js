@@ -17,7 +17,7 @@ function doPost(e) {
     var projectName = payload.projectName || '기본';
     var records = payload.records || [];
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = SpreadsheetApp.openById('1iPCE__uKALFDoEA5Bm1LzEmWV5XiZ9Rd0wx4vM_O5Zg');
     var sheet = ss.getSheetByName(projectName);
 
     if (!sheet) {
