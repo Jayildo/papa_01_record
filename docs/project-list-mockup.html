@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>프로젝트 목록 - 목업</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* 모바일 우선 */
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-dvh">
+
+<div class="max-w-lg mx-auto p-4">
+  <!-- 헤더 -->
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-xl font-bold text-gray-900">수목 전정 현황</h1>
+    <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 transition-colors text-lg">
+      🌙
+    </button>
+  </div>
+
+  <!-- 월 필터 버튼 (가로 스크롤) -->
+  <div class="flex gap-2 mb-4 overflow-x-auto no-scrollbar pb-1">
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-blue-600 text-white">
+      전체
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200 active:bg-gray-100">
+      26.03
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200 active:bg-gray-100">
+      26.02
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200 active:bg-gray-100">
+      26.01
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200 active:bg-gray-100">
+      25.12
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200 active:bg-gray-100">
+      25.11
+    </button>
+  </div>
+
+  <!-- 프로젝트 카드 목록 (최신순) -->
+  <div class="flex flex-col gap-2.5 mb-6">
+
+    <!-- 3월 프로젝트들 -->
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">래미안 303동 전정</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">839건</span> · 2026.03.28
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">래미안 301동 전정</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">640건</span> · 2026.03.25
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">힐스테이트 외곽 수목</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">312건</span> · 2026.03.15
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+    <!-- 2월 프로젝트들 -->
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">자이 아파트 A동</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">455건</span> · 2026.02.20
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">푸르지오 외곽 전정</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">220건</span> · 2026.02.10
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 새 프로젝트 버튼 -->
+  <button class="w-full bg-blue-600 text-white py-4 rounded-xl text-base font-medium cursor-pointer active:bg-blue-700">
+    + 새 프로젝트
+  </button>
+</div>
+
+<!-- ==================== -->
+<!-- 26.03 선택된 상태 예시 -->
+<!-- ==================== -->
+<div class="max-w-lg mx-auto p-4 mt-8 border-t-4 border-dashed border-gray-300">
+  <p class="text-center text-xs text-gray-400 mb-4">↓ 26.03 버튼을 눌렀을 때 ↓</p>
+
+  <div class="flex items-center justify-between mb-5">
+    <h1 class="text-xl font-bold text-gray-900">수목 전정 현황</h1>
+    <button class="w-10 h-10 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 transition-colors text-lg">
+      🌙
+    </button>
+  </div>
+
+  <div class="flex gap-2 mb-4 overflow-x-auto no-scrollbar pb-1">
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200">
+      전체
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-blue-600 text-white">
+      26.03
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200">
+      26.02
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200">
+      26.01
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200">
+      25.12
+    </button>
+    <button class="px-4 py-2 rounded-full text-sm font-semibold shrink-0 bg-white text-gray-600 border border-gray-200">
+      25.11
+    </button>
+  </div>
+
+  <!-- 3월만 필터링 -->
+  <div class="flex flex-col gap-2.5 mb-6">
+
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">래미안 303동 전정</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">839건</span> · 2026.03.28
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">래미안 301동 전정</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">640건</span> · 2026.03.25
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between rounded-xl p-4 cursor-pointer bg-white border border-gray-200 active:bg-gray-100 transition-colors">
+      <div class="min-w-0">
+        <div class="font-medium truncate text-gray-900">힐스테이트 외곽 수목</div>
+        <div class="text-xs text-gray-400 mt-0.5">
+          <span class="text-blue-500 font-medium">312건</span> · 2026.03.15
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+        <button class="text-red-400 active:text-red-600 cursor-pointer text-sm px-3 py-2 shrink-0">삭제</button>
+      </div>
+    </div>
+
+  </div>
+
+  <button class="w-full bg-blue-600 text-white py-4 rounded-xl text-base font-medium cursor-pointer active:bg-blue-700">
+    + 새 프로젝트
+  </button>
+</div>
+
+</body>
+</html>
