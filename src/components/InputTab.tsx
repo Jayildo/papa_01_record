@@ -98,7 +98,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       return;
     }
 
-    const nextId = records.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+    const nextId = records.reduce((min, r) => Math.min(min, r.id), 0) - 1;
     shouldScroll.current = true;
     setRecords([
       ...records,

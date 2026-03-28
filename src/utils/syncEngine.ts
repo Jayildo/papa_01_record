@@ -243,10 +243,9 @@ export async function syncRecords(
     const serverMap = new Map<number, (typeof serverRows)[0]>();
     for (const row of serverRecords) serverMap.set(row.id, row);
 
-    // Build changes from full diff
+    // Build changes from full diff — 삭제는 절대 추론하지 않음 (명시적 삭제만 허용)
     const updates = new Map<number, TreeRecord>();
     const inserts: TreeRecord[] = [];
-    const deletes: number[] = [];
 
     localRecords.forEach((r) => {
       if (r._isNew || !serverMap.has(r.id)) {
@@ -256,15 +255,14 @@ export async function syncRecords(
       }
     });
 
-    const localIds = new Set(localRecords.filter((r) => !r._isNew).map((r) => r.id));
-    for (const [serverId] of serverMap) {
-      if (!localIds.has(serverId)) deletes.push(serverId);
-    }
+    // ⚠️ 서버에만 있고 로컬에 없는 레코드는 삭제하지 않음
+    // 로컬 state가 불완전할 수 있으므로 (range 잘림, 스테일 클로저 등)
+    // 삭제는 사용자가 UI에서 명시적으로 수행한 경우에만 pendingRef.deletes를 통해 전달됨
 
     // Delegate to syncChanges (reuse logic)
     syncInProgress = false; // release lock for syncChanges
     return await syncChanges(
-      { updates, inserts, deletes, allRecords: localRecords },
+      { updates, inserts, deletes: [], allRecords: localRecords },
       projectId,
     );
   } catch (err) {
@@ -277,22 +275,18 @@ export async function syncRecords(
 }
 
 /** Flush offline queue — call when coming back online */
-export async function flushOfflineQueue(
-  getRecords: (projectId: string) => TreeRecord[] | undefined,
-): Promise<void> {
+export async function flushOfflineQueue(): Promise<void> {
   const { getOfflineQueue } = await import('./offlineStore');
   const queue = getOfflineQueue();
   for (const entry of queue) {
-    const current = getRecords(entry.projectId);
-    if (current) {
-      const result = await syncRecords(current, entry.projectId);
+    // 큐에 저장된 레코드를 직접 사용 (스테일 클로저 방지)
+    if (entry.records && entry.records.length > 0) {
+      const result = await syncRecords(entry.records, entry.projectId);
       if (result.status === 'offline') {
-        // Truly offline — stop trying
         console.warn('flushOfflineQueue: stopping — offline');
         break;
       }
       if (result.status === 'error') {
-        // This project failed, but try the next one
         console.warn('flushOfflineQueue: skipping', entry.projectId, 'due to error');
         continue;
       }

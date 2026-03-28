@@ -144,25 +144,31 @@ function AppContent() {
 
     setLoadError('');
 
-    const { data: recordRows, error: recordsError } = await supabase
-      .from('tree_records')
-      .select('*')
-      .is('deleted_at', null)
-      .order('sort_order', { ascending: true })
-      .range(0, 9999);
-    if (recordsError) console.error('loadProjects records:', recordsError);
-
+    // 프로젝트별로 레코드 fetch (range 잘림 방지)
     const recordsByProject = new Map<string, TreeRecord[]>();
-    for (const r of recordRows ?? []) {
-      const list = recordsByProject.get(r.project_id) ?? [];
-      list.push({
-        id: r.id,
-        diameter: Number(r.diameter),
-        species: r.species as TreeRecord['species'],
-        location: r.location,
-        note: r.note ?? '',
-      });
-      recordsByProject.set(r.project_id, list);
+    for (const proj of projectRows) {
+      const { data: rows, error: recErr } = await supabase
+        .from('tree_records')
+        .select('*')
+        .eq('project_id', proj.id)
+        .is('deleted_at', null)
+        .order('sort_order', { ascending: true });
+      if (recErr) {
+        console.error(`loadProjects records for ${proj.id}:`, recErr);
+        continue;
+      }
+      if (rows && rows.length > 0) {
+        recordsByProject.set(
+          proj.id,
+          rows.map((r) => ({
+            id: r.id,
+            diameter: Number(r.diameter),
+            species: r.species as TreeRecord['species'],
+            location: r.location,
+            note: r.note ?? '',
+          })),
+        );
+      }
     }
 
     const serverProjects = projectRows.map((p) => ({
@@ -175,6 +181,13 @@ function AppContent() {
     // 사용자가 편집 중이면 서버 데이터로 덮어쓰지 않음 (데이터 유실 방지)
     if (dirtyRef.current) {
       console.warn('loadProjects: skipped server overwrite — local edits in progress');
+      setLoading(false);
+      return;
+    }
+
+    // 빈 서버 응답으로 기존 로컬 데이터 삭제 방지
+    if (serverProjects.length === 0 && localProjects && localProjects.length > 0) {
+      console.warn('loadProjects: server returned empty but local has data — keeping local');
       setLoading(false);
       return;
     }
@@ -238,13 +251,15 @@ function AppContent() {
             } else {
               // 기존 레코드 수정
               const old = oldRecords.find((o) => o.id === r.id);
-              if (old && (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location || (old.note ?? '') !== (r.note ?? ''))) {
-                // diameter가 0으로 변경되는 건 의도하지 않은 덮어쓰기일 수 있음 — 방어
+              if (old) {
+                // diameter가 0으로 변경되는 건 의도하지 않은 덮어쓰기 — 원래 값 복원
                 if (old.diameter > 0 && r.diameter === 0) {
-                  console.warn(`setRecords: blocked diameter→0 for id=${r.id} (was ${old.diameter})`);
-                  continue;
+                  console.warn(`setRecords: restored diameter for id=${r.id} (was ${old.diameter})`);
+                  r.diameter = old.diameter;
                 }
-                pending.updates.set(r.id, r);
+                if (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location || (old.note ?? '') !== (r.note ?? '')) {
+                  pending.updates.set(r.id, r);
+                }
               }
             }
           }
@@ -266,18 +281,16 @@ function AppContent() {
   // 레코드 DB 동기화 (변경 기반 sync)
   const doSync = useCallback(
     async (_records: TreeRecord[], projectId: string) => {
-      const changes = { ...pendingRef.current };
-      // sync 전에 pending 초기화 (sync 중 새 변경은 다음 cycle로)
-      pendingRef.current = {
-        updates: new Map(),
-        inserts: [],
-        deletes: [],
-        allRecords: changes.allRecords,
+      // pending 스냅샷 (sync 중 새 변경은 계속 pendingRef에 추가됨)
+      const changes: PendingChanges = {
+        updates: new Map(pendingRef.current.updates),
+        inserts: [...pendingRef.current.inserts],
+        deletes: [...pendingRef.current.deletes],
+        allRecords: pendingRef.current.allRecords,
       };
 
       setSyncStatus('syncing');
       setSyncError('');
-      // pending이 비어있으면 full sync (복원 등 전체 교체 시)
       const hasChanges = changes.updates.size > 0 || changes.inserts.length > 0 || changes.deletes.length > 0;
       const result = hasChanges
         ? await syncChanges(changes, projectId)
@@ -285,47 +298,43 @@ function AppContent() {
       setSyncStatus(result.status);
       if (result.error) setSyncError(result.error);
 
-      // Only patch temp IDs → real IDs (never replace entire state)
-      if (result.idMappings && result.idMappings.length > 0) {
-        const map = new Map(result.idMappings.map((m) => [m.tempId, m.realId]));
-        dirtyRef.current = false;
-        setIsDirty(false);
-        setProjects((prev) =>
-          prev.map((p) => {
-            if (p.id !== projectId) return p;
-            return {
-              ...p,
-              records: p.records.map((r) => {
-                const realId = map.get(r.id);
-                return realId != null ? { ...r, id: realId, _isNew: undefined } : r;
-              }),
-            };
-          }),
-        );
-      }
+      if (result.status === 'synced' || (result.idMappings && result.idMappings.length > 0)) {
+        // sync 성공 후에만 전송된 변경분을 pending에서 제거
+        const p = pendingRef.current;
+        changes.updates.forEach((_, k) => p.updates.delete(k));
+        p.inserts = p.inserts.filter((ins) => !changes.inserts.some((c) => c.id === ins.id));
+        p.deletes = p.deletes.filter((id) => !changes.deletes.includes(id));
 
-      // 성공 시 Google Sheets 백업 (fire-and-forget)
-      if (result.status === 'synced') {
+        // ID 매핑 적용
+        if (result.idMappings && result.idMappings.length > 0) {
+          const map = new Map(result.idMappings.map((m) => [m.tempId, m.realId]));
+          setProjects((prev) =>
+            prev.map((p) => {
+              if (p.id !== projectId) return p;
+              return {
+                ...p,
+                records: p.records.map((r) => {
+                  const realId = map.get(r.id);
+                  return realId != null ? { ...r, id: realId, _isNew: undefined } : r;
+                }),
+              };
+            }),
+          );
+        }
+
+        // Google Sheets 백업 (ID 매핑 반영)
         const proj = projectsRef.current.find(p => p.id === projectId);
         if (proj) {
-          backupToGoogleSheets(changes.allRecords, proj.name);
+          backupToGoogleSheets(proj.records, proj.name);
+        }
+
+        // 더 이상 pending이 없으면 dirty 해제
+        if (p.updates.size === 0 && p.inserts.length === 0 && p.deletes.length === 0) {
+          dirtyRef.current = false;
+          setIsDirty(false);
         }
       }
-
-      // 에러 시 변경분 복원 (재시도용)
-      if (result.status === 'error' || result.status === 'syncing') {
-        const p = pendingRef.current;
-        changes.updates.forEach((v, k) => { if (!p.updates.has(k)) p.updates.set(k, v); });
-        changes.inserts.forEach((ins) => {
-          if (!p.inserts.some((i) => i.id === ins.id)) p.inserts.push(ins);
-        });
-        changes.deletes.forEach((id) => {
-          if (!p.deletes.includes(id)) p.deletes.push(id);
-        });
-      } else {
-        dirtyRef.current = false;
-        setIsDirty(false);
-      }
+      // 실패 시: pending은 그대로 유지됨 (다음 cycle에서 재시도)
     },
     [],
   );
@@ -373,7 +382,7 @@ function AppContent() {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && selectedId) {
-        const proj = projects.find(p => p.id === selectedId);
+        const proj = projectsRef.current.find(p => p.id === selectedId);
         if (proj) {
           persistRecordsImmediate(selectedId, proj.records);
         }
@@ -381,7 +390,7 @@ function AppContent() {
     };
     const handlePageHide = () => {
       if (selectedId) {
-        const proj = projects.find(p => p.id === selectedId);
+        const proj = projectsRef.current.find(p => p.id === selectedId);
         if (proj) {
           persistRecordsImmediate(selectedId, proj.records);
         }
@@ -393,31 +402,26 @@ function AppContent() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [selectedId, projects]);
+  }, [selectedId]);
 
   // 온라인/오프라인 감지
   useEffect(() => {
     const handleOnline = () => {
       setSyncStatus('synced');
-      // Flush offline queue
-      flushOfflineQueue((projectId) => {
-        const project = projects.find((p) => p.id === projectId);
-        return project?.records;
-      });
+      flushOfflineQueue();
     };
     const handleOffline = () => setSyncStatus('offline');
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Set initial status
     if (!navigator.onLine) setSyncStatus('offline');
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [projects]);
+  }, []);
 
   const createProject = async () => {
     const name = newName.trim();
