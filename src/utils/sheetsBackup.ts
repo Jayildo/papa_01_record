@@ -15,9 +15,9 @@ export async function backupToGoogleSheets(
   if (!SHEETS_URL) return;
 
   try {
-    const response = await fetch(SHEETS_URL, {
+    await fetch(SHEETS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      mode: 'no-cors',
       body: JSON.stringify({
         projectName,
         records: records.map((r, idx) => ({
@@ -30,10 +30,6 @@ export async function backupToGoogleSheets(
         })),
       }),
     });
-
-    if (!response.ok) {
-      console.warn('Google Sheets backup: HTTP', response.status);
-    }
   } catch (err) {
     console.warn('Google Sheets backup failed (non-critical):', err);
   }
