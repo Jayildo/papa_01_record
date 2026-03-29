@@ -122,6 +122,19 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
     }
   }, [records.length]);
 
+  // 자동 행 추가: 마지막 행 완성 후 2초 디바운스
+  // sync 중에는 방지 (auto-save와의 경합 회피)
+  const lastRowComplete = !!lastRecord && lastRecord.diameter > 0
+    && lastRecord.species !== '' && lastRecord.location.trim() !== '';
+
+  useEffect(() => {
+    if (!lastRowComplete || disabled || syncStatus === 'syncing') return;
+    const timer = setTimeout(() => {
+      addRow();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [lastRowComplete, lastRecord?.diameter, syncStatus]);
+
   const removeRow = (id: number) => {
     setRecords(records.filter((r) => r.id !== id));
   };
@@ -603,19 +616,23 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
         </table>
       </div>
 
-      {/* 모바일: 하단 고정 바 (행 추가 + 저장만) */}
+      {/* 모바일: 좌측 플로팅 행 추가 버튼 (키패드 위에 보이도록) */}
+      <button
+        onClick={addRow}
+        disabled={lastRowIncomplete || disabled}
+        className="fixed left-3 bottom-20 sm:hidden z-50
+          w-12 h-12 rounded-full bg-green-600 text-white text-2xl font-bold
+          shadow-lg active:bg-green-700 cursor-pointer disabled:opacity-30
+          flex items-center justify-center"
+      >
+        +
+      </button>
+
+      {/* 모바일: 하단 고정 바 (저장만) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur
         border-t border-gray-200 dark:border-gray-700 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]
         sm:hidden z-50">
-        <div className="flex gap-2">
-          <button
-            onClick={addRow}
-            disabled={lastRowIncomplete}
-            className="flex-1 bg-green-600 text-white py-3.5 rounded-xl text-base font-medium
-              active:bg-green-700 cursor-pointer disabled:opacity-50"
-          >
-            + 행 추가
-          </button>
+        <div className="flex justify-end">
           {onSave && (
             <button
               onClick={() => {
