@@ -758,7 +758,7 @@ function AppContent() {
             title="변경 이력"
             aria-label="변경 이력"
           >
-            ↺
+            🗂
           </button>
           {darkToggle}
         </div>
