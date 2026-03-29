@@ -118,7 +118,15 @@ function AppContent() {
     // 1단계: 로컬 데이터 먼저 표시 (즉시)
     const localProjects = await loadLocalProjects();
     if (localProjects && localProjects.length > 0) {
-      setProjects(localProjects);
+      // 구버전 캐시 호환: _syncState 없는 레코드에 기본값 부여
+      const migrated = localProjects.map(p => ({
+        ...p,
+        records: p.records.map(r => ({
+          ...r,
+          _syncState: r._syncState ?? ('synced' as const),
+        })),
+      }));
+      setProjects(migrated);
       setLoading(false);
     }
 
