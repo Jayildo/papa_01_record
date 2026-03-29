@@ -123,9 +123,10 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   }, [records.length]);
 
   // 자동 행 추가: 마지막 행 완성 후 2초 디바운스
-  // sync 중에는 방지 (auto-save와의 경합 회피)
+  // synced 상태(기존 데이터)에서는 발동하지 않음 — 새로 입력한 행(pending)만 대상
   const lastRowComplete = !!lastRecord && lastRecord.diameter > 0
-    && lastRecord.species !== '' && lastRecord.location.trim() !== '';
+    && lastRecord.species !== '' && lastRecord.location.trim() !== ''
+    && lastRecord._syncState !== 'synced';
 
   useEffect(() => {
     if (!lastRowComplete || disabled || syncStatus === 'syncing') return;
