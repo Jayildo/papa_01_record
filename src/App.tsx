@@ -468,6 +468,40 @@ function AppContent() {
     return <PinScreen onSuccess={() => setAuthed(true)} />;
   }
 
+  const clearCache = async () => {
+    if (!confirm('로컬 캐시를 초기화하고 서버 데이터로 새로고침합니다.\n계속하시겠습니까?')) return;
+    try {
+      // IndexedDB 삭제
+      const dbs = await indexedDB.databases?.() ?? [];
+      for (const db of dbs) {
+        if (db.name) indexedDB.deleteDatabase(db.name);
+      }
+      // localStorage 정리
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('papa_') || k.startsWith('papa_01'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      // Service Worker 캐시 삭제
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map(n => caches.delete(n)));
+      }
+      // SW unregister & reload
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      window.location.reload();
+    } catch (e) {
+      console.error('clearCache:', e);
+      window.location.reload();
+    }
+  };
+
   const darkToggle = (
     <button
       onClick={() => setDark((d) => !d)}
@@ -528,7 +562,20 @@ function AppContent() {
         <div className="max-w-lg mx-auto p-4">
           <div className="flex items-center justify-between mb-5">
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">수목 전정 현황</h1>
-            {darkToggle}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={clearCache}
+                className="w-10 h-10 flex items-center justify-center rounded-full cursor-pointer
+                  text-gray-400 hover:bg-gray-100 active:bg-gray-200
+                  dark:hover:bg-gray-700 dark:active:bg-gray-600
+                  transition-colors text-sm shrink-0"
+                title="캐시 초기화"
+                aria-label="캐시 초기화"
+              >
+                ↻
+              </button>
+              {darkToggle}
+            </div>
           </div>
 
           {loadErrorBanner}
