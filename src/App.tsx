@@ -175,17 +175,6 @@ function AppContent() {
       createdAt: p.created_at,
     }));
 
-    // 사용자가 편집 중이면 서버 데이터로 덮어쓰지 않음 (데이터 유실 방지)
-    const currentProjects = projectsRef.current;
-    const hasLocalEdits = currentProjects.some(p =>
-      p.records.some(r => r._syncState !== 'synced'),
-    );
-    if (hasLocalEdits) {
-      console.warn('loadProjects: skipped server overwrite — local edits in progress');
-      setLoading(false);
-      return;
-    }
-
     // 빈 서버 응답으로 기존 로컬 데이터 삭제 방지
     if (serverProjects.length === 0 && localProjects && localProjects.length > 0) {
       console.warn('loadProjects: server returned empty but local has data — keeping local');
@@ -193,7 +182,24 @@ function AppContent() {
       return;
     }
 
-    setProjects(serverProjects);
+    // 편집 중인 프로젝트는 로컬 데이터 보호, 나머지는 서버 데이터로 갱신
+    const currentProjects = projectsRef.current;
+    const localEditIds = new Set(
+      currentProjects
+        .filter(p => p.records.some(r => r._syncState !== 'synced'))
+        .map(p => p.id),
+    );
+
+    const merged = serverProjects.map(sp => {
+      if (localEditIds.has(sp.id)) {
+        // 편집 중인 프로젝트는 로컬 데이터 유지
+        const local = currentProjects.find(p => p.id === sp.id);
+        return local ?? sp;
+      }
+      return sp;
+    });
+
+    setProjects(merged);
     setLoading(false);
 
     // 서버 데이터를 로컬에 저장 (다음 로드 시 즉시 사용)
@@ -417,11 +423,33 @@ function AppContent() {
     }
   };
 
+  const renameProject = async (id: string) => {
+    const target = projects.find((p) => p.id === id);
+    if (!target) return;
+    const newName = prompt('새 프로젝트명을 입력하세요.', target.name);
+    if (!newName || newName.trim() === '' || newName === target.name) return;
+    const { error } = await supabase
+      .from('projects')
+      .update({ name: newName.trim() })
+      .eq('id', id);
+    if (error) {
+      console.error('renameProject:', error);
+      alert('이름 변경 실패: ' + error.message);
+      return;
+    }
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, name: newName.trim() } : p)),
+    );
+  };
+
   const deleteProject = async (id: string) => {
     const target = projects.find((p) => p.id === id);
     if (!target) return;
-    if (!confirm(`"${target.name}" 프로젝트를 삭제하시겠습니까?\n(데이터 ${target.records.length}건 포함)`))
+    const input = prompt(`"${target.name}" 프로젝트를 삭제하려면\n프로젝트명을 정확히 입력하세요. (데이터 ${target.records.length}건 삭제)`);
+    if (input !== target.name) {
+      if (input !== null) alert('프로젝트명이 일치하지 않습니다.');
       return;
+    }
     // Soft delete tree_records first to avoid CASCADE/trigger conflicts
     const { error: recError } = await supabase
       .from('tree_records')
@@ -562,16 +590,28 @@ function AppContent() {
                       <span className="text-blue-500 dark:text-blue-400 font-medium">{validCount}건</span> &middot; {new Date(p.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteProject(p.id);
-                    }}
-                    className="text-red-400 hover:text-red-500 active:text-red-600 cursor-pointer
-                      text-sm px-3 py-2 shrink-0 -mr-1"
-                  >
-                    삭제
-                  </button>
+                  <div className="flex items-center shrink-0 -mr-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        renameProject(p.id);
+                      }}
+                      className="text-gray-400 hover:text-blue-500 active:text-blue-600 cursor-pointer
+                        text-sm px-2 py-2"
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteProject(p.id);
+                      }}
+                      className="text-red-400 hover:text-red-500 active:text-red-600 cursor-pointer
+                        text-sm px-2 py-2"
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </div>
               );
             })}
