@@ -815,7 +815,7 @@ function AppContent() {
         </div>
 
         {activeTab === 'input' ? (
-          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory || !!selected.sealed} onSave={selected.sealed ? undefined : handleSave} isDirty={isDirty} syncStatus={syncStatus} sealed={!!selected.sealed} />
+          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory} onSave={selected.sealed ? undefined : handleSave} isDirty={isDirty} syncStatus={syncStatus} sealed={!!selected.sealed} />
         ) : (
           <ResultTab records={selected.records} projectName={selected.name} />
         )}

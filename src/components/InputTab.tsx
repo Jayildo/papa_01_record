@@ -130,7 +130,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
     && lastRecord._syncState !== 'synced';
 
   useEffect(() => {
-    if (!lastRowComplete || disabled || syncStatus === 'syncing') return;
+    if (!lastRowComplete || disabled || sealed || syncStatus === 'syncing') return;
     const timer = setTimeout(() => {
       addRow();
     }, 2000);
@@ -665,7 +665,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
         </div>
       </div>
 
-      {disabled && (
+      {disabled && !sealed && (
         <div className="fixed inset-0 z-[90] bg-black/20 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 px-6 py-3 rounded-xl shadow-lg text-sm font-medium text-gray-700 dark:text-gray-200">
             이력 복원 중...
