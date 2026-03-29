@@ -90,6 +90,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   );
 
   const addRow = () => {
+    if (sealed) return;
     if (lastRowIncomplete) {
       const missing: string[] = [];
       if (lastRecord.diameter <= 0) missing.push('흉고직경');
@@ -138,10 +139,12 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   }, [lastRowComplete, lastRecord?.diameter, syncStatus]);
 
   const removeRow = (id: number) => {
+    if (sealed) return;
     setRecords(records.filter((r) => r.id !== id));
   };
 
   const updateRecord = (id: number, field: keyof TreeRecord, value: string | number) => {
+    if (sealed) return;
     setRecords(records.map((r) => {
       if (r.id !== id) return r;
       const updated = { ...r, [field]: value };
@@ -476,7 +479,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       </div>
 
       {/* 모바일: 카드 레이아웃 - 한 줄 컴팩트 */}
-      <div className="flex flex-col gap-2 pb-28 sm:hidden">
+      <div className={`flex flex-col gap-2 pb-28 sm:hidden ${sealed ? 'pointer-events-none opacity-60' : ''}`}>
         {records.length === 0 && (
           <p className="text-gray-400 dark:text-gray-500 py-12 text-center">
             데이터가 없습니다.<br />하단의 "행 추가" 버튼을 눌러주세요.
@@ -542,7 +545,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       </div>
 
       {/* 데스크톱: 테이블 레이아웃 */}
-      <div className="overflow-x-auto hidden sm:block">
+      <div className={`overflow-x-auto hidden sm:block ${sealed ? 'pointer-events-none opacity-60' : ''}`}>
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-gray-100 dark:bg-gray-800">
@@ -626,7 +629,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       </div>
 
       {/* 모바일: 좌측 플로팅 행 추가 버튼 (키패드 위에 보이도록) */}
-      <button
+      {!sealed && <button
         onClick={addRow}
         disabled={lastRowIncomplete || disabled}
         className="fixed left-3 bottom-20 sm:hidden z-50
@@ -635,7 +638,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
           flex items-center justify-center"
       >
         +
-      </button>
+      </button>}
 
       {/* 모바일: 하단 고정 바 (저장만) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur
