@@ -171,6 +171,7 @@ export default function HistoryPanel({ projectId, onRestore, onClose }: Props) {
           species: (d.species as TreeRecord['species']) || '',
           location: (d.location as string) || '',
           note: (d.note as string) ?? '',
+          _syncState: 'pending',
         });
       }
 

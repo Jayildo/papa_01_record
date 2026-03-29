@@ -1,3 +1,5 @@
+export type RecordSyncState = 'draft' | 'pending' | 'synced';
+
 export interface TreeRecord {
   id: number;
   diameter: number;
@@ -5,7 +7,7 @@ export interface TreeRecord {
   location: string;
   note?: string;  // 비고
   updated_at?: string;
-  _isNew?: boolean;
+  _syncState: RecordSyncState;
 }
 
 export interface Project {

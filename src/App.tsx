@@ -2,10 +2,9 @@ import { useState, useEffect, useCallback, useRef, Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import type { Project, TreeRecord, SyncStatus } from './types';
 import { supabase } from './lib/supabase';
-import { syncChanges, syncRecords, flushOfflineQueue } from './utils/syncEngine';
-import { persistRecordsImmediate, persistProjectsImmediate, loadLocalProjects } from './utils/offlineStore';
+import { syncPendingRecords, flushOfflineQueue, hashRecord } from './utils/syncEngine';
+import { persistRecordsImmediate, persistProjectsImmediate, loadLocalProjects, loadDeletedIds, persistDeletedIds, clearDeletedIds } from './utils/offlineStore';
 import { backupToGoogleSheets } from './utils/sheetsBackup';
-import type { PendingChanges } from './utils/syncEngine';
 import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
 import PinScreen, { isAuthed } from './components/PinScreen';
@@ -69,16 +68,13 @@ function AppContent() {
   // projects ref (doSync 등 콜백에서 최신 projects 참조용)
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
-  // dirty 플래그: 사용자가 실제로 데이터를 수정했을 때만 true
-  const dirtyRef = useRef(false);
-  const [isDirty, setIsDirty] = useState(false);
-  // 변경 추적: 실제 변경된 레코드만 sync
-  const pendingRef = useRef<PendingChanges>({
-    updates: new Map(),
-    inserts: [],
-    deletes: [],
-    allRecords: [],
-  });
+  // deletedIds ref (삭제 대기 ID — sync 시 soft delete 전송)
+  const deletedIdsRef = useRef<number[]>([]);
+
+  // isDirty는 _syncState에서 파생 (selected보다 먼저 사용되므로 projects에서 직접 계산)
+  const isDirty = selectedId
+    ? projects.find(p => p.id === selectedId)?.records.some(r => r._syncState !== 'synced') ?? false
+    : false;
 
   // 다크모드
   useEffect(() => {
@@ -166,6 +162,7 @@ function AppContent() {
             species: r.species as TreeRecord['species'],
             location: r.location,
             note: r.note ?? '',
+            _syncState: 'synced' as const,
           })),
         );
       }
@@ -179,7 +176,11 @@ function AppContent() {
     }));
 
     // 사용자가 편집 중이면 서버 데이터로 덮어쓰지 않음 (데이터 유실 방지)
-    if (dirtyRef.current) {
+    const currentProjects = projectsRef.current;
+    const hasLocalEdits = currentProjects.some(p =>
+      p.records.some(r => r._syncState !== 'synced'),
+    );
+    if (hasLocalEdits) {
       console.warn('loadProjects: skipped server overwrite — local edits in progress');
       setLoading(false);
       return;
@@ -212,61 +213,36 @@ function AppContent() {
 
   const selected = projects.find((p) => p.id === selectedId) ?? null;
 
-  // 레코드 업데이트 (로컬 state + 변경 추적)
+  // 프로젝트 선택 시 deletedIds 로드
+  useEffect(() => {
+    if (selectedId) {
+      loadDeletedIds(selectedId).then(ids => {
+        deletedIdsRef.current = ids;
+      });
+    }
+  }, [selectedId]);
+
+  // 레코드 업데이트 (단순화: 로컬 state + IndexedDB 즉시 저장만)
   const setRecords = useCallback(
     (updater: TreeRecord[] | ((prev: TreeRecord[]) => TreeRecord[])) => {
-      dirtyRef.current = true;
-      setIsDirty(true);
       setProjects((prev) =>
         prev.map((p) => {
           if (p.id !== selectedId) return p;
           const oldRecords = p.records;
           const newRecords = typeof updater === 'function' ? updater(oldRecords) : updater;
 
-          // 변경 추적
-          const pending = pendingRef.current;
-          const oldIds = new Set(oldRecords.map((r) => r.id));
-          const newIds = new Set(newRecords.map((r) => r.id));
-
-          // 삭제된 레코드 (old에는 있고 new에는 없음)
+          // 삭제 감지: old에는 있고 new에는 없는 서버 레코드 → deletedIds에 추가
+          const newIds = new Set(newRecords.map(r => r.id));
           for (const r of oldRecords) {
-            if (!newIds.has(r.id) && !r._isNew) {
-              pending.deletes.push(r.id);
-              pending.updates.delete(r.id);
-            }
-          }
-
-          // 추가/수정된 레코드
-          for (const r of newRecords) {
-            if (r._isNew || !oldIds.has(r.id)) {
-              // 새 레코드 (중복 방지)
-              if (!pending.inserts.some((ins) => ins.id === r.id)) {
-                pending.inserts.push(r);
-              } else {
-                // 이미 inserts에 있으면 업데이트
-                pending.inserts = pending.inserts.map((ins) =>
-                  ins.id === r.id ? r : ins,
-                );
-              }
-            } else {
-              // 기존 레코드 수정
-              const old = oldRecords.find((o) => o.id === r.id);
-              if (old) {
-                // diameter가 0으로 변경되는 건 의도하지 않은 덮어쓰기 — 원래 값 복원
-                if (old.diameter > 0 && r.diameter === 0) {
-                  console.warn(`setRecords: restored diameter for id=${r.id} (was ${old.diameter})`);
-                  r.diameter = old.diameter;
-                }
-                if (old.diameter !== r.diameter || old.species !== r.species || old.location !== r.location || (old.note ?? '') !== (r.note ?? '')) {
-                  pending.updates.set(r.id, r);
-                }
+            if (!newIds.has(r.id) && r.id > 0) {
+              if (!deletedIdsRef.current.includes(r.id)) {
+                deletedIdsRef.current.push(r.id);
+                persistDeletedIds(selectedId!, deletedIdsRef.current);
               }
             }
           }
 
-          pending.allRecords = newRecords;
-
-          // 매 입력마다 즉시 IndexedDB에 저장 (탭 닫혀도 데이터 유지)
+          // 매 입력마다 즉시 IndexedDB에 저장
           if (selectedId) {
             persistRecordsImmediate(selectedId, newRecords);
           }
@@ -278,63 +254,56 @@ function AppContent() {
     [selectedId],
   );
 
-  // 레코드 DB 동기화 (변경 기반 sync)
+  // 레코드 DB 동기화 (_syncState 기반)
   const doSync = useCallback(
-    async (_records: TreeRecord[], projectId: string) => {
-      // pending 스냅샷 (sync 중 새 변경은 계속 pendingRef에 추가됨)
-      const changes: PendingChanges = {
-        updates: new Map(pendingRef.current.updates),
-        inserts: [...pendingRef.current.inserts],
-        deletes: [...pendingRef.current.deletes],
-        allRecords: pendingRef.current.allRecords,
-      };
+    async (records: TreeRecord[], projectId: string) => {
+      // sync 대상 레코드의 hash 캡처 (sync 중 변경 감지용)
+      const pendingRecords = records.filter(r => r._syncState === 'pending');
+      if (pendingRecords.length === 0 && deletedIdsRef.current.length === 0) return;
+
+      const preHash = new Map(pendingRecords.map(r => [r.id, hashRecord(r)]));
 
       setSyncStatus('syncing');
       setSyncError('');
-      const hasChanges = changes.updates.size > 0 || changes.inserts.length > 0 || changes.deletes.length > 0;
-      const result = hasChanges
-        ? await syncChanges(changes, projectId)
-        : await syncRecords(changes.allRecords, projectId);
+
+      const result = await syncPendingRecords(records, projectId, deletedIdsRef.current);
       setSyncStatus(result.status);
       if (result.error) setSyncError(result.error);
 
-      if (result.status === 'synced' || (result.idMappings && result.idMappings.length > 0)) {
-        // sync 성공 후에만 전송된 변경분을 pending에서 제거
-        const p = pendingRef.current;
-        changes.updates.forEach((_, k) => p.updates.delete(k));
-        p.inserts = p.inserts.filter((ins) => !changes.inserts.some((c) => c.id === ins.id));
-        p.deletes = p.deletes.filter((id) => !changes.deletes.includes(id));
-
-        // ID 매핑 적용
-        if (result.idMappings && result.idMappings.length > 0) {
-          const map = new Map(result.idMappings.map((m) => [m.tempId, m.realId]));
-          setProjects((prev) =>
-            prev.map((p) => {
-              if (p.id !== projectId) return p;
-              return {
-                ...p,
-                records: p.records.map((r) => {
-                  const realId = map.get(r.id);
-                  return realId != null ? { ...r, id: realId, _isNew: undefined } : r;
-                }),
-              };
-            }),
-          );
+      if (result.status === 'synced' || result.idMappings.size > 0) {
+        // 삭제 완료 → deletedIds 정리
+        if (result.status === 'synced' && deletedIdsRef.current.length > 0) {
+          deletedIdsRef.current = [];
+          clearDeletedIds(projectId);
         }
 
-        // Google Sheets 백업 (ID 매핑 반영)
+        // atomic 상태 전환: ID mapping + synced 마킹
+        setProjects(prev =>
+          prev.map(p => {
+            if (p.id !== projectId) return p;
+            return {
+              ...p,
+              records: p.records.map(r => {
+                const realId = result.idMappings.get(r.id);
+                const wasSyncing = preHash.has(r.id);
+                const unchanged = wasSyncing && hashRecord(r) === preHash.get(r.id);
+
+                return {
+                  ...r,
+                  id: realId ?? r.id,
+                  _syncState: unchanged ? 'synced' as const : r._syncState,
+                };
+              }),
+            };
+          }),
+        );
+
+        // Google Sheets 백업
         const proj = projectsRef.current.find(p => p.id === projectId);
         if (proj) {
           backupToGoogleSheets(proj.records, proj.name);
         }
-
-        // 더 이상 pending이 없으면 dirty 해제
-        if (p.updates.size === 0 && p.inserts.length === 0 && p.deletes.length === 0) {
-          dirtyRef.current = false;
-          setIsDirty(false);
-        }
       }
-      // 실패 시: pending은 그대로 유지됨 (다음 cycle에서 재시도)
     },
     [],
   );
@@ -342,41 +311,42 @@ function AppContent() {
   const handleHistoryRestore = useCallback(
     (restoredRecords: TreeRecord[]) => {
       if (!selectedId) return;
-      dirtyRef.current = true;
-      setIsDirty(true);
-      // 복원은 전체 교체 → pending 초기화, full sync로 처리
-      pendingRef.current = {
-        updates: new Map(),
-        inserts: [],
-        deletes: [],
-        allRecords: restoredRecords,
-      };
+      // 복원된 레코드를 모두 pending으로 마킹
+      const markedRecords = restoredRecords.map(r => ({
+        ...r,
+        _syncState: 'pending' as const,
+      }));
       setProjects((prev) =>
         prev.map((p) =>
-          p.id === selectedId ? { ...p, records: restoredRecords } : p,
+          p.id === selectedId ? { ...p, records: markedRecords } : p,
         ),
       );
+      if (selectedId) {
+        persistRecordsImmediate(selectedId, markedRecords);
+      }
     },
     [selectedId],
   );
 
   // 수동 저장
   const handleSave = useCallback(() => {
-    if (!selected || !dirtyRef.current) return;
+    if (!selected || !isDirty) return;
     doSync(selected.records, selected.id);
-  }, [selected, doSync]);
+  }, [selected, isDirty, doSync]);
 
-  // 자동 저장 (2초 디바운스)
+  // 자동 저장 (2초 디바운스) — pending 레코드가 있을 때만
+  const hasPendingRecords = selected?.records.some(r => r._syncState === 'pending') ?? false;
   useEffect(() => {
-    if (!isDirty || !selectedId) return;
+    if (!hasPendingRecords && deletedIdsRef.current.length === 0) return;
+    if (!selectedId) return;
     const timer = setTimeout(() => {
-      const proj = projects.find(p => p.id === selectedId);
-      if (proj && dirtyRef.current) {
+      const proj = projectsRef.current.find(p => p.id === selectedId);
+      if (proj) {
         doSync(proj.records, proj.id);
       }
     }, 2000);
     return () => clearTimeout(timer);
-  }, [isDirty, selectedId, projects, doSync]);
+  }, [hasPendingRecords, selectedId, doSync]);
 
   // 모바일: 앱 전환/화면 잠금 시 즉시 로컬 저장
   useEffect(() => {

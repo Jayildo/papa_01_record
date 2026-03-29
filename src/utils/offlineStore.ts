@@ -202,6 +202,63 @@ export async function persistProjectsImmediate(projects: Project[]): Promise<voi
   }
 }
 
+// ── 삭제 대기 ID 관리 ──
+
+const DELETED_IDS_PREFIX = 'papa_deleted_';
+
+/** 삭제 대기 ID를 IndexedDB에 저장 */
+export async function persistDeletedIds(projectId: string, ids: number[]): Promise<void> {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(ids, `deleted_${projectId}`);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    try {
+      localStorage.setItem(`${DELETED_IDS_PREFIX}${projectId}`, JSON.stringify(ids));
+    } catch { /* ignore */ }
+  }
+}
+
+/** 삭제 대기 ID 로드 */
+export async function loadDeletedIds(projectId: string): Promise<number[]> {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(`deleted_${projectId}`);
+    return new Promise((resolve) => {
+      req.onsuccess = () => resolve(req.result ?? []);
+      req.onerror = () => resolve([]);
+    });
+  } catch {
+    try {
+      const raw = localStorage.getItem(`${DELETED_IDS_PREFIX}${projectId}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+/** 삭제 대기 ID 정리 (sync 성공 후) */
+export async function clearDeletedIds(projectId: string): Promise<void> {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(`deleted_${projectId}`);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(`${DELETED_IDS_PREFIX}${projectId}`);
+  } catch { /* ignore */ }
+}
+
 /** IndexedDB에서 프로젝트 목록 로드 */
 export async function loadLocalProjects(): Promise<Project[] | null> {
   try {

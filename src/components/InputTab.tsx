@@ -108,7 +108,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
         species: lastRecord?.species ?? '',
         location: lastRecord?.location ?? '',
         note: '',
-        _isNew: true,
+        _syncState: 'draft',
       },
     ]);
   };
@@ -127,7 +127,21 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   };
 
   const updateRecord = (id: number, field: keyof TreeRecord, value: string | number) => {
-    setRecords(records.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+    setRecords(records.map((r) => {
+      if (r.id !== id) return r;
+      const updated = { ...r, [field]: value };
+      // 상태 전환: draft/synced → pending (모든 필드 입력 완료 시)
+      if (updated._syncState === 'draft') {
+        const isComplete = updated.diameter > 0 && updated.species !== '' && updated.location.trim() !== '';
+        if (isComplete) {
+          updated._syncState = 'pending';
+        }
+      } else if (updated._syncState === 'synced') {
+        // 기존 레코드 수정 시 pending으로
+        updated._syncState = 'pending';
+      }
+      return updated;
+    }));
   };
 
   const legendItems = [
