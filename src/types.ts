@@ -15,6 +15,7 @@ export interface Project {
   name: string;
   records: TreeRecord[];
   createdAt: string;
+  sealed?: boolean;  // 확정 상태 — true이면 수정 불가
 }
 
 export type DiameterRange = '~10' | '11~20' | '21~30' | '31~40' | '41~50' | '51~60' | '61~70' | '71~';

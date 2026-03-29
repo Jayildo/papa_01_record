@@ -61,9 +61,10 @@ interface Props {
   onSave?: () => void;
   isDirty?: boolean;
   syncStatus?: string;
+  sealed?: boolean;
 }
 
-export default function InputTab({ records, setRecords, projectName, disabled = false, onSave, isDirty, syncStatus }: Props) {
+export default function InputTab({ records, setRecords, projectName, disabled = false, onSave, isDirty, syncStatus, sealed = false }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
   const shouldScroll = useRef(false);
@@ -355,6 +356,13 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
 
   return (
     <div>
+      {/* 확정 상태 배너 */}
+      {sealed && (
+        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg px-3 py-2 mb-3 text-sm text-green-700 dark:text-green-300 text-center font-medium">
+          확정된 프로젝트입니다 (읽기 전용)
+        </div>
+      )}
+
       {/* 내보내기 버튼 */}
       {records.length > 0 && (
         <div className="flex items-center gap-2 mb-3">

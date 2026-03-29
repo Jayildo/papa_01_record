@@ -181,6 +181,7 @@ function AppContent() {
       name: p.name,
       records: recordsByProject.get(p.id) ?? [],
       createdAt: p.created_at,
+      sealed: p.sealed ?? false,
     }));
 
     // 빈 서버 응답으로 기존 로컬 데이터 삭제 방지
@@ -431,6 +432,27 @@ function AppContent() {
     }
   };
 
+  const toggleSealProject = async (id: string) => {
+    const target = projects.find((p) => p.id === id);
+    if (!target) return;
+    const newSealed = !target.sealed;
+    const action = newSealed ? '확정' : '확정 해제';
+    if (!confirm(`"${target.name}" 프로젝트를 ${action}하시겠습니까?\n${newSealed ? '확정 후에는 데이터를 수정할 수 없습니다.' : '데이터 수정이 가능해집니다.'}`))
+      return;
+    const { error } = await supabase
+      .from('projects')
+      .update({ sealed: newSealed })
+      .eq('id', id);
+    if (error) {
+      console.error('toggleSealProject:', error);
+      alert(`${action} 실패: ${error.message}`);
+      return;
+    }
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, sealed: newSealed } : p)),
+    );
+  };
+
   const renameProject = async (id: string) => {
     const target = projects.find((p) => p.id === id);
     if (!target) return;
@@ -640,22 +662,42 @@ function AppContent() {
                   }}
                 >
                   <div className="min-w-0">
-                    <div className="font-medium truncate text-gray-900 dark:text-gray-100">{p.name}</div>
+                    <div className="font-medium truncate text-gray-900 dark:text-gray-100">
+                      {p.sealed && <span className="text-green-600 dark:text-green-400 mr-1">✓</span>}
+                      {p.name}
+                    </div>
                     <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                      <span className="text-blue-500 dark:text-blue-400 font-medium">{validCount}건</span> &middot; {new Date(p.createdAt).toLocaleDateString()}
+                      <span className="text-blue-500 dark:text-blue-400 font-medium">{validCount}건</span>
+                      {p.sealed && <span className="text-green-600 dark:text-green-400 ml-1">확정</span>}
+                      {' '}&middot; {new Date(p.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div className="flex items-center shrink-0 -mr-1">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        renameProject(p.id);
+                        toggleSealProject(p.id);
                       }}
-                      className="text-gray-400 hover:text-blue-500 active:text-blue-600 cursor-pointer
-                        text-sm px-2 py-2"
+                      className={`cursor-pointer text-sm px-2 py-2 ${
+                        p.sealed
+                          ? 'text-green-600 hover:text-green-700 active:text-green-800'
+                          : 'text-gray-400 hover:text-green-500 active:text-green-600'
+                      }`}
                     >
-                      수정
+                      {p.sealed ? '해제' : '확정'}
                     </button>
+                    {!p.sealed && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          renameProject(p.id);
+                        }}
+                        className="text-gray-400 hover:text-blue-500 active:text-blue-600 cursor-pointer
+                          text-sm px-2 py-2"
+                      >
+                        수정
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -773,7 +815,7 @@ function AppContent() {
         </div>
 
         {activeTab === 'input' ? (
-          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory} onSave={handleSave} isDirty={isDirty} syncStatus={syncStatus} />
+          <InputTab records={selected.records} setRecords={setRecords} projectName={selected.name} disabled={showHistory || !!selected.sealed} onSave={selected.sealed ? undefined : handleSave} isDirty={isDirty} syncStatus={syncStatus} sealed={!!selected.sealed} />
         ) : (
           <ResultTab records={selected.records} projectName={selected.name} />
         )}

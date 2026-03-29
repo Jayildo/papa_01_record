@@ -42,8 +42,9 @@ export async function syncPendingRecords(
   }
 
   const pendingRecords = allRecords.filter(r => r._syncState === 'pending');
-  const toInsert = pendingRecords.filter(r => r.id < 0);
-  const toUpdate = pendingRecords.filter(r => r.id > 0);
+  // 안전장치: diameter <= 0인 레코드는 절대 sync하지 않음
+  const toInsert = pendingRecords.filter(r => r.id < 0 && r.diameter > 0);
+  const toUpdate = pendingRecords.filter(r => r.id > 0 && r.diameter > 0);
 
   // 4. 할 일 없으면 종료
   if (toInsert.length === 0 && toUpdate.length === 0 && deletedIds.length === 0) {
