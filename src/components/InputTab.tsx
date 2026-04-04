@@ -68,7 +68,6 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   const bottomRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
   const shouldScroll = useRef(false);
-  const lastDiameterRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
 
   const locationOptions = useMemo(() => {
@@ -122,7 +121,15 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setTimeout(() => {
-          lastDiameterRef.current?.focus();
+          const el = document.querySelector<HTMLInputElement>('[data-last-diameter]');
+          if (el && el.offsetParent !== null) el.focus();
+          else {
+            // 모바일: 숨겨진 데스크톱 input 건너뛰고 보이는 것 찾기
+            const all = document.querySelectorAll<HTMLInputElement>('[data-last-diameter]');
+            for (const input of all) {
+              if (input.offsetParent !== null) { input.focus(); break; }
+            }
+          }
         }, 300);
       });
     }
@@ -502,7 +509,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 {idx + 1}
               </span>
               <input
-                ref={idx === records.length - 1 ? lastDiameterRef : undefined}
+                data-last-diameter={idx === records.length - 1 || undefined}
                 type="number"
                 inputMode="decimal"
                 min={0}
@@ -580,7 +587,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 </td>
                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
                   <input
-                    ref={idx === records.length - 1 ? lastDiameterRef : undefined}
+                    data-last-diameter={idx === records.length - 1 || undefined}
                     type="number"
                     min={0}
                     value={r.diameter || ''}
