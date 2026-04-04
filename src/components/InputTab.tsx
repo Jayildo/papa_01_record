@@ -510,6 +510,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
               </span>
               <input
                 data-last-diameter={idx === records.length - 1 || undefined}
+                data-diameter-row={r.id}
                 type="number"
                 inputMode="decimal"
                 min={0}
@@ -523,7 +524,15 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
               <div className="shrink-0">
                 <SpeciesToggle
                   value={r.species}
-                  onChange={(v) => updateRecord(r.id, 'species', v)}
+                  onChange={(v) => {
+                    updateRecord(r.id, 'species', v);
+                    requestAnimationFrame(() => {
+                      const inputs = document.querySelectorAll<HTMLInputElement>(`[data-diameter-row="${r.id}"]`);
+                      for (const input of inputs) {
+                        if (input.offsetParent !== null) { input.focus(); break; }
+                      }
+                    });
+                  }}
                 />
               </div>
               <LocationComboBox
@@ -588,6 +597,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
                   <input
                     data-last-diameter={idx === records.length - 1 || undefined}
+                    data-diameter-row={r.id}
                     type="number"
                     min={0}
                     value={r.diameter || ''}
@@ -602,7 +612,15 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 }`}>
                   <SpeciesToggle
                     value={r.species}
-                    onChange={(v) => updateRecord(r.id, 'species', v)}
+                    onChange={(v) => {
+                      updateRecord(r.id, 'species', v);
+                      requestAnimationFrame(() => {
+                        const inputs = document.querySelectorAll<HTMLInputElement>(`[data-diameter-row="${r.id}"]`);
+                        for (const input of inputs) {
+                          if (input.offsetParent !== null) { input.focus(); break; }
+                        }
+                      });
+                    }}
                   />
                 </td>
                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
