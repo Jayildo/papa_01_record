@@ -68,6 +68,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
   const bottomRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLDivElement>(null);
   const shouldScroll = useRef(false);
+  const lastDiameterRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
 
   const locationOptions = useMemo(() => {
@@ -120,6 +121,9 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
       shouldScroll.current = false;
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          lastDiameterRef.current?.focus();
+        }, 300);
       });
     }
   }, [records.length]);
@@ -131,12 +135,12 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
     && lastRecord._syncState !== 'synced';
 
   useEffect(() => {
-    if (!lastRowComplete || disabled || sealed || syncStatus === 'syncing') return;
+    if (!lastRowComplete || disabled || sealed) return;
     const timer = setTimeout(() => {
       addRow();
-    }, 2000);
+    }, 700);
     return () => clearTimeout(timer);
-  }, [lastRowComplete, lastRecord?.diameter, syncStatus]);
+  }, [lastRowComplete, lastRecord?.diameter]);
 
   const removeRow = (id: number) => {
     if (sealed) return;
@@ -498,6 +502,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 {idx + 1}
               </span>
               <input
+                ref={idx === records.length - 1 ? lastDiameterRef : undefined}
                 type="number"
                 inputMode="decimal"
                 min={0}
@@ -575,6 +580,7 @@ export default function InputTab({ records, setRecords, projectName, disabled = 
                 </td>
                 <td className="border border-gray-300 dark:border-gray-600 px-1 py-1">
                   <input
+                    ref={idx === records.length - 1 ? lastDiameterRef : undefined}
                     type="number"
                     min={0}
                     value={r.diameter || ''}
