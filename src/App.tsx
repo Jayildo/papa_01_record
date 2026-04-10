@@ -10,6 +10,7 @@ import ResultTab from './components/ResultTab';
 import PinScreen, { isAuthed } from './components/PinScreen';
 import SyncIndicator from './components/SyncIndicator';
 import HistoryPanel from './components/HistoryPanel';
+import LaborWorkbench from './components/LaborWorkbench';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
   constructor(props: { children: ReactNode }) {
@@ -50,9 +51,37 @@ function loadDark(): boolean {
 }
 
 type Tab = 'input' | 'result';
+type Workspace = 'tree' | 'labor';
+
+function WorkspaceTabs({
+  active,
+  onChange,
+}: {
+  active: Workspace;
+  onChange: (workspace: Workspace) => void;
+}) {
+  const tabClass = (workspace: Workspace) =>
+    `px-4 py-2 rounded-full text-sm font-semibold cursor-pointer transition-colors ${
+      active === workspace
+        ? 'bg-blue-600 text-white'
+        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+    }`;
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto">
+      <button className={tabClass('tree')} onClick={() => onChange('tree')}>
+        수목 계측
+      </button>
+      <button className={tabClass('labor')} onClick={() => onChange('labor')}>
+        노무비
+      </button>
+    </div>
+  );
+}
 
 function AppContent() {
   const [authed, setAuthed] = useState(isAuthed);
+  const [workspace, setWorkspace] = useState<Workspace>('tree');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('input');
@@ -547,6 +576,28 @@ function AppContent() {
   );
 
   // 로딩
+  if (workspace === 'labor') {
+    return (
+      <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
+        <div className="max-w-7xl mx-auto p-4">
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">노무비 관리</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  엑셀 기반 노무비 업무를 웹 탭 구조로 옮기는 초기 작업공간
+                </p>
+              </div>
+              {darkToggle}
+            </div>
+            <WorkspaceTabs active={workspace} onChange={setWorkspace} />
+          </div>
+          <LaborWorkbench />
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -590,8 +641,11 @@ function AppContent() {
     return (
       <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
         <div className="max-w-lg mx-auto p-4">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-start justify-between gap-3 mb-5">
+            <div className="space-y-3">
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">수목 전정 현황</h1>
+            <WorkspaceTabs active={workspace} onChange={setWorkspace} />
+            </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={clearCache}
@@ -790,6 +844,9 @@ function AppContent() {
               {selected.name}
             </h1>
             <SyncIndicator status={syncStatus} errorMsg={syncError} onRetry={handleSave} />
+            <div className="mt-3">
+              <WorkspaceTabs active={workspace} onChange={setWorkspace} />
+            </div>
           </div>
           <button
             onClick={() => setShowHistory(true)}
