@@ -129,7 +129,7 @@ async function handlerInner(req: VercelRequest, res: VercelResponse) {
   const compressed = gzipSync(Buffer.from(payload, 'utf-8'));
 
   await put(blobPath, compressed, {
-    access: 'public',
+    access: 'private',
     contentType: 'application/gzip',
     addRandomSuffix: false,
   });
