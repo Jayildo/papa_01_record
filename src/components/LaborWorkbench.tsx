@@ -172,6 +172,11 @@ export default function LaborWorkbench() {
   const [reportPdfUrl, setReportPdfUrl] = useState<string | null>(null);
   const [reportPdfLoading, setReportPdfLoading] = useState(false);
   const [showCalibrator, setShowCalibrator] = useState(false);
+  const [importTarget, setImportTarget] = useState<'company' | 'workers' | null>(null);
+  const [importSourceId, setImportSourceId] = useState<string>('');
+  const [importWorkerList, setImportWorkerList] = useState<LaborWorker[]>([]);
+  const [importWorkerSelected, setImportWorkerSelected] = useState<Set<string>>(new Set());
+  const [importLoading, setImportLoading] = useState(false);
 
   const selectedProject = useMemo(() => projects.find((project) => project.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
   const validWorkers = useMemo(() => workers.filter((worker) => worker.name.trim() !== ''), [workers]);
@@ -473,6 +478,63 @@ export default function LaborWorkbench() {
     }
   };
 
+  const handleImportSourceChange = async (sourceId: string) => {
+    setImportSourceId(sourceId);
+    if (!sourceId) {
+      setImportWorkerList([]);
+      setImportWorkerSelected(new Set());
+      return;
+    }
+    try {
+      setImportLoading(true);
+      const bundle = await getLaborProjectBundle(sourceId);
+      setImportWorkerList(bundle.workers);
+      setImportWorkerSelected(new Set(bundle.workers.map(w => w.id)));
+    } catch (error) {
+      console.error('LaborWorkbench import source:', error);
+      setNotice({ tone: 'error', message: '프로젝트 데이터를 불러오지 못했습니다.' });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportCompany = async () => {
+    if (!importSourceId) return;
+    try {
+      setImportLoading(true);
+      const bundle = await getLaborProjectBundle(importSourceId);
+      const imported = metaFromProject(bundle.project);
+      setMeta(prev => ({ ...imported, workYear: prev.workYear, workMonth: prev.workMonth, paymentDate: prev.paymentDate }));
+      setImportTarget(null);
+      setImportSourceId('');
+      setNotice({ tone: 'success', message: '회사정보를 불러왔습니다.' });
+    } catch (error) {
+      console.error('LaborWorkbench import company:', error);
+      setNotice({ tone: 'error', message: '회사정보를 불러오지 못했습니다.' });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleImportWorkers = () => {
+    const selected = importWorkerList.filter(w => importWorkerSelected.has(w.id));
+    if (selected.length === 0) return;
+    const newWorkers = selected.map(w => ({ ...w, id: crypto.randomUUID() }));
+    setWorkers(prev => [...prev.filter(w => w.name.trim()), ...newWorkers]);
+    setImportTarget(null);
+    setImportSourceId('');
+    setImportWorkerList([]);
+    setImportWorkerSelected(new Set());
+    setNotice({ tone: 'success', message: `근로자 ${selected.length}명을 불러왔습니다.` });
+  };
+
+  const closeImportPanel = () => {
+    setImportTarget(null);
+    setImportSourceId('');
+    setImportWorkerList([]);
+    setImportWorkerSelected(new Set());
+  };
+
   const handleSave = async () => {
     const validationError = validateBeforeSave();
     if (validationError || !selectedProject) {
@@ -550,7 +612,38 @@ export default function LaborWorkbench() {
 
       {!loading && activeTab === 'company' && (
         <section className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-          <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">회사정보</h3>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">회사정보</h3>
+            <button
+              onClick={() => { setImportTarget(importTarget === 'company' ? null : 'company'); setImportSourceId(''); }}
+              disabled={!selectedProject || projects.length < 2}
+              className="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+            >
+              불러오기
+            </button>
+          </div>
+          {importTarget === 'company' && (
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+              <div className="mb-3 text-sm font-medium text-blue-900 dark:text-blue-100">다른 프로젝트에서 회사정보 불러오기</div>
+              <div className="mb-3">
+                <select
+                  value={importSourceId}
+                  onChange={(e) => setImportSourceId(e.target.value)}
+                  className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm dark:border-blue-800 dark:bg-gray-900 dark:text-gray-100"
+                >
+                  <option value="">프로젝트 선택</option>
+                  {projects.filter(p => p.id !== selectedProjectId).map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.workYear}.{String(p.workMonth).padStart(2, '0')})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-xs text-amber-600 dark:text-amber-400 mb-3">연도, 월, 지급일은 현재 값이 유지됩니다.</div>
+              <div className="flex gap-2">
+                <button onClick={handleImportCompany} disabled={!importSourceId || importLoading} className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{importLoading ? '불러오는 중...' : '불러오기'}</button>
+                <button onClick={closeImportPanel} className="cursor-pointer rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300">취소</button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <LabeledInput label="회사명" value={meta.companyName} onChange={(value) => setMetaField('companyName', value)} disabled={!selectedProject} required />
             <LabeledInput label="현장명" value={meta.siteName} onChange={(value) => setMetaField('siteName', value)} disabled={!selectedProject} required />
@@ -576,8 +669,70 @@ export default function LaborWorkbench() {
         <section className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">근로자</h3>
-            <button onClick={addWorker} disabled={!selectedProject} className="cursor-pointer rounded-xl bg-blue-600 px-4 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">+ 근로자 추가</button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setImportTarget(importTarget === 'workers' ? null : 'workers'); setImportSourceId(''); setImportWorkerList([]); setImportWorkerSelected(new Set()); }}
+                disabled={!selectedProject || projects.length < 2}
+                className="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+              >
+                근로자 불러오기
+              </button>
+              <button onClick={addWorker} disabled={!selectedProject} className="cursor-pointer rounded-xl bg-blue-600 px-4 py-2 font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">+ 근로자 추가</button>
+            </div>
           </div>
+          {importTarget === 'workers' && (
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+              <div className="mb-3 text-sm font-medium text-blue-900 dark:text-blue-100">다른 프로젝트에서 근로자 불러오기</div>
+              <div className="mb-3">
+                <select
+                  value={importSourceId}
+                  onChange={(e) => handleImportSourceChange(e.target.value)}
+                  className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm dark:border-blue-800 dark:bg-gray-900 dark:text-gray-100"
+                >
+                  <option value="">프로젝트 선택</option>
+                  {projects.filter(p => p.id !== selectedProjectId).map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.workYear}.{String(p.workMonth).padStart(2, '0')})</option>
+                  ))}
+                </select>
+              </div>
+              {importLoading && <div className="mb-3 text-sm text-gray-500">근로자 목록을 불러오는 중...</div>}
+              {importWorkerList.length > 0 && (
+                <>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{importWorkerSelected.size}명 / {importWorkerList.length}명 선택</span>
+                    <button
+                      onClick={() => setImportWorkerSelected(prev => prev.size === importWorkerList.length ? new Set() : new Set(importWorkerList.map(w => w.id)))}
+                      className="cursor-pointer text-xs text-blue-600 dark:text-blue-400"
+                    >
+                      {importWorkerSelected.size === importWorkerList.length ? '전체 해제' : '전체 선택'}
+                    </button>
+                  </div>
+                  <div className="mb-3 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-blue-100 bg-white p-2 dark:border-blue-900 dark:bg-gray-900">
+                    {importWorkerList.map(w => (
+                      <label key={w.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-950/30">
+                        <input
+                          type="checkbox"
+                          checked={importWorkerSelected.has(w.id)}
+                          onChange={() => setImportWorkerSelected(prev => {
+                            const next = new Set(prev);
+                            if (next.has(w.id)) next.delete(w.id); else next.add(w.id);
+                            return next;
+                          })}
+                          className="rounded"
+                        />
+                        <span className="text-gray-900 dark:text-gray-100">{w.name}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{w.jobType || '-'}, {formatCurrency(w.dailyWage)}원</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+              <div className="flex gap-2">
+                <button onClick={handleImportWorkers} disabled={importWorkerSelected.size === 0 || importLoading} className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">불러오기 ({importWorkerSelected.size}명)</button>
+                <button onClick={closeImportPanel} className="cursor-pointer rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-300">취소</button>
+              </div>
+            </div>
+          )}
           <div className="space-y-4">
             {workers.map((worker, index) => (
               <div key={worker.id} className="rounded-2xl border border-gray-200 p-3 dark:border-gray-700">
