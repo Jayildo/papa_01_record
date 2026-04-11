@@ -1,4 +1,44 @@
+export interface LaborCompany {
+  id: string;
+  companyName: string;
+  representativeName: string;
+  businessRegistrationNumber: string;
+  companyAddress: string;
+  companyPhone: string;
+  companyPhoneMobile: string;
+  companyFax: string;
+  workplaceManagementNumber: string;
+}
+
+export interface LaborPoolWorker {
+  id: string;
+  name: string;
+  residentId: string;
+  phone: string;
+  address: string;
+  jobType: string;
+  teamName: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  employmentDurationType: 'under_1_month' | 'one_month_or_more';
+  workplaceType: 'construction' | 'general';
+  defaultDailyWage: number;
+}
+
 export interface LaborProjectMeta {
+  companyId: string | null;
+  siteName: string;
+  workYear: number;
+  workMonth: number;
+  managerName: string;
+  paymentDate: string;
+  managerResidentId: string;
+  managerTitle: string;
+  managerJobDescription: string;
+}
+
+export interface LaborResolvedMeta {
   companyName: string;
   siteName: string;
   workYear: number;
@@ -26,6 +66,7 @@ export interface LaborProjectRecord extends LaborProjectMeta {
 
 export interface LaborWorker {
   id: string;
+  poolWorkerId: string | null;
   name: string;
   residentId: string;
   phone: string;
@@ -79,4 +120,5 @@ export interface LaborProjectBundle {
   project: LaborProjectRecord;
   workers: LaborWorker[];
   entries: LaborEntry[];
+  company: LaborCompany | null;
 }

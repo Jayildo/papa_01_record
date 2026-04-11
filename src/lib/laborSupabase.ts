@@ -1,20 +1,48 @@
 import { supabase } from './supabase';
-import type { LaborEntry, LaborProjectBundle, LaborProjectRecord, LaborWorker } from '../laborTypes';
+import type { LaborCompany, LaborEntry, LaborPoolWorker, LaborProjectBundle, LaborProjectRecord, LaborWorker } from '../laborTypes';
+
+type LaborCompanyRow = {
+  id: string;
+  company_name: string;
+  representative_name: string;
+  business_registration_number: string;
+  company_address: string;
+  company_phone: string;
+  company_phone_mobile: string;
+  company_fax: string;
+  workplace_management_number: string;
+  created_at: string;
+};
+
+type LaborPoolWorkerRow = {
+  id: string;
+  name: string;
+  resident_id: string;
+  phone: string;
+  address: string;
+  job_type: string;
+  team_name: string;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+  employment_duration_type: 'under_1_month' | 'one_month_or_more';
+  workplace_type: 'construction' | 'general';
+  default_daily_wage: number;
+  created_at: string;
+};
 
 type LaborProjectRow = {
   id: string;
   name: string;
-  company_name: string;
+  company_id: string | null;
   site_name: string;
   work_year: number;
   work_month: number;
   manager_name: string;
   payment_date: string | null;
-  workplace_management_number: string;
-  business_registration_number: string;
-  company_address: string;
-  company_phone: string;
-  representative_name: string;
+  manager_resident_id: string;
+  manager_title: string;
+  manager_job_description: string;
   created_at: string;
   sealed: boolean;
 };
@@ -22,6 +50,7 @@ type LaborProjectRow = {
 type LaborWorkerRow = {
   id: string;
   project_id: string;
+  pool_worker_id: string | null;
   name: string;
   resident_id: string;
   phone: string;
@@ -52,26 +81,51 @@ type LaborEntryRow = {
   note: string;
 };
 
+function mapCompany(row: LaborCompanyRow): LaborCompany {
+  return {
+    id: row.id,
+    companyName: row.company_name,
+    representativeName: row.representative_name,
+    businessRegistrationNumber: row.business_registration_number,
+    companyAddress: row.company_address,
+    companyPhone: row.company_phone,
+    companyPhoneMobile: row.company_phone_mobile,
+    companyFax: row.company_fax,
+    workplaceManagementNumber: row.workplace_management_number,
+  };
+}
+
+function mapPoolWorker(row: LaborPoolWorkerRow): LaborPoolWorker {
+  return {
+    id: row.id,
+    name: row.name,
+    residentId: row.resident_id,
+    phone: row.phone,
+    address: row.address,
+    jobType: row.job_type,
+    teamName: row.team_name,
+    bankName: row.bank_name,
+    accountNumber: row.account_number,
+    accountHolder: row.account_holder,
+    employmentDurationType: row.employment_duration_type,
+    workplaceType: row.workplace_type,
+    defaultDailyWage: Number(row.default_daily_wage),
+  };
+}
+
 function mapProject(row: LaborProjectRow): LaborProjectRecord {
   return {
     id: row.id,
     name: row.name,
-    companyName: row.company_name,
+    companyId: row.company_id ?? null,
     siteName: row.site_name,
     workYear: row.work_year,
     workMonth: row.work_month,
     managerName: row.manager_name,
     paymentDate: row.payment_date ?? '',
-    workplaceManagementNumber: row.workplace_management_number,
-    businessRegistrationNumber: row.business_registration_number,
-    companyAddress: row.company_address,
-    companyPhone: row.company_phone,
-    companyPhoneMobile: (row as Record<string, unknown>).company_phone_mobile as string ?? '',
-    companyFax: (row as Record<string, unknown>).company_fax as string ?? '',
-    representativeName: row.representative_name,
-    managerResidentId: (row as Record<string, unknown>).manager_resident_id as string ?? '',
-    managerTitle: (row as Record<string, unknown>).manager_title as string ?? '',
-    managerJobDescription: (row as Record<string, unknown>).manager_job_description as string ?? '',
+    managerResidentId: row.manager_resident_id ?? '',
+    managerTitle: row.manager_title ?? '',
+    managerJobDescription: row.manager_job_description ?? '',
     createdAt: row.created_at,
     sealed: row.sealed,
   };
@@ -80,6 +134,7 @@ function mapProject(row: LaborProjectRow): LaborProjectRecord {
 function mapWorker(row: LaborWorkerRow): LaborWorker {
   return {
     id: row.id,
+    poolWorkerId: row.pool_worker_id ?? null,
     name: row.name,
     residentId: row.resident_id,
     phone: row.phone,
@@ -110,6 +165,104 @@ function mapEntry(row: LaborEntryRow): LaborEntry {
   };
 }
 
+// --- Company CRUD ---
+
+export async function listLaborCompanies(): Promise<LaborCompany[]> {
+  const { data, error } = await supabase
+    .from('labor_companies')
+    .select('*')
+    .is('deleted_at', null)
+    .order('company_name', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map((row) => mapCompany(row as LaborCompanyRow));
+}
+
+export async function saveLaborCompany(company: LaborCompany): Promise<LaborCompany> {
+  const id = company.id || crypto.randomUUID();
+  const payload = {
+    id,
+    company_name: company.companyName,
+    representative_name: company.representativeName,
+    business_registration_number: company.businessRegistrationNumber,
+    company_address: company.companyAddress,
+    company_phone: company.companyPhone,
+    company_phone_mobile: company.companyPhoneMobile,
+    company_fax: company.companyFax,
+    workplace_management_number: company.workplaceManagementNumber,
+  };
+
+  const { data, error } = await supabase
+    .from('labor_companies')
+    .upsert(payload, { onConflict: 'id' })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapCompany(data as LaborCompanyRow);
+}
+
+export async function archiveLaborCompany(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('labor_companies')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// --- Pool Worker CRUD ---
+
+export async function listLaborPoolWorkers(): Promise<LaborPoolWorker[]> {
+  const { data, error } = await supabase
+    .from('labor_worker_pool')
+    .select('*')
+    .is('deleted_at', null)
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map((row) => mapPoolWorker(row as LaborPoolWorkerRow));
+}
+
+export async function saveLaborPoolWorker(worker: LaborPoolWorker): Promise<LaborPoolWorker> {
+  const id = worker.id || crypto.randomUUID();
+  const payload = {
+    id,
+    name: worker.name,
+    resident_id: worker.residentId,
+    phone: worker.phone,
+    address: worker.address,
+    job_type: worker.jobType,
+    team_name: worker.teamName,
+    bank_name: worker.bankName,
+    account_number: worker.accountNumber,
+    account_holder: worker.accountHolder,
+    employment_duration_type: worker.employmentDurationType,
+    workplace_type: worker.workplaceType,
+    default_daily_wage: worker.defaultDailyWage,
+  };
+
+  const { data, error } = await supabase
+    .from('labor_worker_pool')
+    .upsert(payload, { onConflict: 'id' })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapPoolWorker(data as LaborPoolWorkerRow);
+}
+
+export async function archiveLaborPoolWorker(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('labor_worker_pool')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// --- Project CRUD ---
+
 export async function listLaborProjects(): Promise<LaborProjectRecord[]> {
   const { data, error } = await supabase
     .from('labor_projects')
@@ -121,19 +274,15 @@ export async function listLaborProjects(): Promise<LaborProjectRecord[]> {
   return (data ?? []).map((row) => mapProject(row as LaborProjectRow));
 }
 
-export async function createLaborProject(name: string): Promise<LaborProjectRecord> {
+export async function createLaborProject(name: string, companyId?: string): Promise<LaborProjectRecord> {
   const now = new Date();
   const { data, error } = await supabase
     .from('labor_projects')
     .insert({
       name,
+      company_id: companyId ?? null,
       work_year: now.getFullYear(),
       work_month: now.getMonth() + 1,
-      workplace_management_number: '',
-      business_registration_number: '',
-      company_address: '',
-      company_phone: '',
-      representative_name: '',
     })
     .select('*')
     .single();
@@ -160,6 +309,22 @@ export async function getLaborProjectBundle(projectId: string): Promise<LaborPro
     .single();
   if (projectError) throw projectError;
 
+  const project = mapProject(projectData as LaborProjectRow);
+
+  let company: LaborCompany | null = null;
+  if (project.companyId) {
+    const { data: companyData, error: companyError } = await supabase
+      .from('labor_companies')
+      .select('*')
+      .eq('id', project.companyId)
+      .single();
+    if (companyError) {
+      console.warn('Failed to load company:', companyError.message);
+    } else if (companyData) {
+      company = mapCompany(companyData as LaborCompanyRow);
+    }
+  }
+
   const { data: workerData, error: workerError } = await supabase
     .from('labor_workers')
     .select('*')
@@ -178,9 +343,10 @@ export async function getLaborProjectBundle(projectId: string): Promise<LaborPro
   if (entryError) throw entryError;
 
   return {
-    project: mapProject(projectData as LaborProjectRow),
+    project,
     workers: (workerData ?? []).map((row) => mapWorker(row as LaborWorkerRow)),
     entries: (entryData ?? []).map((row) => mapEntry(row as LaborEntryRow)),
+    company,
   };
 }
 
@@ -193,17 +359,15 @@ export async function saveLaborProjectBundle(
     .from('labor_projects')
     .update({
       name: project.name,
-      company_name: project.companyName,
+      company_id: project.companyId,
       site_name: project.siteName,
       work_year: project.workYear,
       work_month: project.workMonth,
       manager_name: project.managerName,
       payment_date: project.paymentDate || null,
-      workplace_management_number: project.workplaceManagementNumber,
-      business_registration_number: project.businessRegistrationNumber,
-      company_address: project.companyAddress,
-      company_phone: project.companyPhone,
-      representative_name: project.representativeName,
+      manager_resident_id: project.managerResidentId,
+      manager_title: project.managerTitle,
+      manager_job_description: project.managerJobDescription,
     })
     .eq('id', project.id);
 
@@ -225,6 +389,7 @@ export async function saveLaborProjectBundle(
     const workerPayload = workers.map((worker, index) => ({
       id: worker.id,
       project_id: project.id,
+      pool_worker_id: worker.poolWorkerId,
       name: worker.name,
       resident_id: worker.residentId,
       phone: worker.phone,

@@ -1,4 +1,4 @@
-import type { LaborEntry, LaborProjectMeta, LaborWorker } from '../laborTypes';
+import type { LaborEntry, LaborResolvedMeta, LaborWorker } from '../laborTypes';
 import LaborLedgerDocument from './LaborLedgerDocument';
 import LaborReportDocument from './LaborReportDocument';
 
@@ -36,7 +36,7 @@ export default function LaborPrintSheets({
   entries,
 }: {
   printMode: 'ledger' | 'report' | null;
-  meta: LaborProjectMeta;
+  meta: LaborResolvedMeta;
   ledgerRows: LedgerRow[];
   totals: {
     totalUnits: number;

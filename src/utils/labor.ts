@@ -1,8 +1,11 @@
 import type {
   LaborCalculationBreakdown,
+  LaborCompany,
   LaborEntry,
+  LaborPoolWorker,
   LaborProjectMeta,
   LaborProjectRecord,
+  LaborResolvedMeta,
   LaborWorker,
   LaborWorkerSummary,
 } from '../laborTypes';
@@ -14,19 +17,12 @@ export function getDaysInMonth(year: number, month: number): number {
 export function buildInitialLaborMeta(): LaborProjectMeta {
   const now = new Date();
   return {
-    companyName: '',
+    companyId: null,
     siteName: '',
     workYear: now.getFullYear(),
     workMonth: now.getMonth() + 1,
     managerName: '',
     paymentDate: '',
-    workplaceManagementNumber: '',
-    businessRegistrationNumber: '',
-    companyAddress: '',
-    companyPhone: '',
-    companyPhoneMobile: '',
-    companyFax: '',
-    representativeName: '',
     managerResidentId: '',
     managerTitle: '',
     managerJobDescription: '',
@@ -35,28 +31,22 @@ export function buildInitialLaborMeta(): LaborProjectMeta {
 
 export function metaFromProject(project: LaborProjectRecord): LaborProjectMeta {
   return {
-    companyName: project.companyName,
+    companyId: project.companyId,
     siteName: project.siteName,
     workYear: project.workYear,
     workMonth: project.workMonth,
     managerName: project.managerName,
     paymentDate: project.paymentDate,
-    workplaceManagementNumber: project.workplaceManagementNumber,
-    businessRegistrationNumber: project.businessRegistrationNumber,
-    companyAddress: project.companyAddress,
-    companyPhone: project.companyPhone,
-    companyPhoneMobile: project.companyPhoneMobile ?? '',
-    companyFax: project.companyFax ?? '',
-    representativeName: project.representativeName,
-    managerResidentId: project.managerResidentId ?? '',
-    managerTitle: project.managerTitle ?? '',
-    managerJobDescription: project.managerJobDescription ?? '',
+    managerResidentId: project.managerResidentId,
+    managerTitle: project.managerTitle,
+    managerJobDescription: project.managerJobDescription,
   };
 }
 
 export function buildLaborWorker(): LaborWorker {
   return {
     id: crypto.randomUUID(),
+    poolWorkerId: null,
     name: '',
     residentId: '',
     phone: '',
@@ -75,6 +65,52 @@ export function buildLaborWorker(): LaborWorker {
     manualHealthInsurance: 0,
     manualLongTermCare: 0,
     manualOtherDeduction: 0,
+  };
+}
+
+export function buildWorkerFromPool(poolWorker: LaborPoolWorker): LaborWorker {
+  return {
+    id: crypto.randomUUID(),
+    poolWorkerId: poolWorker.id,
+    name: poolWorker.name,
+    residentId: poolWorker.residentId,
+    phone: poolWorker.phone,
+    address: poolWorker.address,
+    dailyWage: poolWorker.defaultDailyWage,
+    employmentDurationType: poolWorker.employmentDurationType,
+    workplaceType: poolWorker.workplaceType,
+    monthlyHours: 0,
+    jobType: poolWorker.jobType,
+    teamName: poolWorker.teamName,
+    bankName: poolWorker.bankName,
+    accountNumber: poolWorker.accountNumber,
+    accountHolder: poolWorker.accountHolder,
+    calculationType: 'daily_tax',
+    manualNationalPension: 0,
+    manualHealthInsurance: 0,
+    manualLongTermCare: 0,
+    manualOtherDeduction: 0,
+  };
+}
+
+export function buildResolvedMeta(meta: LaborProjectMeta, company: LaborCompany | null): LaborResolvedMeta {
+  return {
+    companyName: company?.companyName ?? '',
+    representativeName: company?.representativeName ?? '',
+    businessRegistrationNumber: company?.businessRegistrationNumber ?? '',
+    companyAddress: company?.companyAddress ?? '',
+    companyPhone: company?.companyPhone ?? '',
+    companyPhoneMobile: company?.companyPhoneMobile ?? '',
+    companyFax: company?.companyFax ?? '',
+    workplaceManagementNumber: company?.workplaceManagementNumber ?? '',
+    siteName: meta.siteName,
+    workYear: meta.workYear,
+    workMonth: meta.workMonth,
+    managerName: meta.managerName,
+    paymentDate: meta.paymentDate,
+    managerResidentId: meta.managerResidentId,
+    managerTitle: meta.managerTitle,
+    managerJobDescription: meta.managerJobDescription,
   };
 }
 

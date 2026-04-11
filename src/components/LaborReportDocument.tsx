@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import qrImage from '../assets/labor-report-qr.png';
-import type { LaborEntry, LaborProjectMeta, LaborWorker } from '../laborTypes';
+import type { LaborEntry, LaborResolvedMeta, LaborWorker } from '../laborTypes';
 import { formatCurrency } from '../utils/labor';
 
 type LedgerRow = {
@@ -113,7 +113,7 @@ export default function LaborReportDocument({
   reportRows,
   entries,
 }: {
-  meta: LaborProjectMeta;
+  meta: LaborResolvedMeta;
   reportRows: ReportRow[];
   entries: LaborEntry[];
 }) {

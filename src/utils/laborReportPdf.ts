@@ -2,7 +2,7 @@ import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import malgunFontUrl from '../assets/malgun.ttf?url';
 import templatePdfUrl from '../assets/labor-report-template.pdf?url';
-import type { LaborProjectMeta, LaborWorker } from '../laborTypes';
+import type { LaborResolvedMeta, LaborWorker } from '../laborTypes';
 
 type LedgerRow = {
   worker: LaborWorker;
@@ -172,7 +172,7 @@ function drawInBox(page: PDFPage, font: PDFFont, text: string, box: Box) {
   }
 }
 
-function drawCommonMeta(page: PDFPage, font: PDFFont, meta: LaborProjectMeta, packetNumber: number, packetCount: number) {
+function drawCommonMeta(page: PDFPage, font: PDFFont, meta: LaborResolvedMeta, packetNumber: number, packetCount: number) {
   // Row 1: 사업장관리번호 | 명칭 | 사업자등록번호
   drawInBox(page, font, meta.workplaceManagementNumber, META_BOXES.workplaceManagementNumber);
   drawInBox(page, font, meta.companyName, META_BOXES.companyName);
@@ -191,7 +191,7 @@ function drawCommonMeta(page: PDFPage, font: PDFFont, meta: LaborProjectMeta, pa
   drawInBox(page, font, `${packetCount}`, META_BOXES.packetCount);
 }
 
-function drawFooter(page: PDFPage, font: PDFFont, meta: LaborProjectMeta) {
+function drawFooter(page: PDFPage, font: PDFFont, meta: LaborResolvedMeta) {
   const signedDate = parsePaymentDate(meta.paymentDate) ?? {
     year: String(meta.workYear),
     month: String(meta.workMonth),
@@ -290,7 +290,7 @@ export async function generateLaborReportPdf({
   meta,
   reportRows,
 }: {
-  meta: LaborProjectMeta;
+  meta: LaborResolvedMeta;
   reportRows: ReportRow[];
 }) {
   const [templateBytes, fontBytes] = await Promise.all([

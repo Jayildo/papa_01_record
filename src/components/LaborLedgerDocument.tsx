@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { formatCurrency } from '../utils/labor';
-import type { LaborEntry, LaborProjectMeta, LaborWorker } from '../laborTypes';
+import type { LaborEntry, LaborResolvedMeta, LaborWorker } from '../laborTypes';
 
 type LedgerRow = {
   worker: LaborWorker;
@@ -42,7 +42,7 @@ export default function LaborLedgerDocument({
   totals,
   entries,
 }: {
-  meta: LaborProjectMeta;
+  meta: LaborResolvedMeta;
   ledgerRows: LedgerRow[];
   totals: {
     totalUnits: number;
