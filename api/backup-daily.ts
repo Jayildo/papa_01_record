@@ -54,6 +54,25 @@ async function runQuery<T = unknown>(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    return await handlerInner(req, res);
+  } catch (err) {
+    console.error('backup-daily crashed:', err);
+    res.status(500).json({
+      error: 'backup-daily crashed',
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack?.split('\n').slice(0, 5) : undefined,
+      env: {
+        hasCronSecret: !!process.env['CRON_SECRET'],
+        hasSupabaseToken: !!process.env['SUPABASE_ACCESS_TOKEN'],
+        hasSupabaseUrl: !!process.env['VITE_SUPABASE_URL'],
+        hasBlobToken: !!process.env['BLOB_READ_WRITE_TOKEN'],
+      },
+    });
+  }
+}
+
+async function handlerInner(req: VercelRequest, res: VercelResponse) {
   // 인증: Vercel Cron은 Authorization: Bearer <CRON_SECRET> 헤더를 자동 첨부
   const cronSecret = process.env['CRON_SECRET'];
   if (cronSecret) {
