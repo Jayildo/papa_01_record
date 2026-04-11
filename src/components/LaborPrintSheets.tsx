@@ -59,8 +59,10 @@ export default function LaborPrintSheets({
       <style>{`
         .labor-print-host { display: none; }
         @media print {
-          @page labor-ledger-page { size: A4 landscape; margin: 6mm; }
-          @page labor-report-page { size: A4 portrait; margin: 6mm; }
+          @page {
+            size: ${printMode === 'ledger' ? 'A4 landscape' : 'A4 portrait'};
+            margin: 6mm;
+          }
           body * { visibility: hidden; }
           .labor-print-host, .labor-print-host * { visibility: visible; }
           .labor-print-host {
@@ -82,8 +84,6 @@ export default function LaborPrintSheets({
             border: none !important;
             margin: 0 auto !important;
           }
-          .labor-print-host .labor-ledger-page { page: labor-ledger-page; }
-          .labor-print-host .labor-report-page { page: labor-report-page; }
         }
       `}</style>
       <div className="labor-print-host">

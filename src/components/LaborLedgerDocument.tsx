@@ -28,9 +28,10 @@ function formatDayCell(units: number) {
   return Number.isInteger(units) ? String(units) : units.toFixed(1);
 }
 
-function getStackedDayPairs() {
+function getStackedDayPairs(): { topDay: number | null; bottomDay: number | null }[] {
+  // 16 pairs: (1,16),(2,17),...,(15,30),(null,31)
   return Array.from({ length: 16 }, (_, index) => ({
-    topDay: index + 1,
+    topDay: index < 15 ? index + 1 : null,
     bottomDay: index + 16 <= 31 ? index + 16 : null,
   }));
 }
@@ -147,20 +148,19 @@ export default function LaborLedgerDocument({
       `}</style>
 
       <section className="labor-ledger-page">
+        <div className="labor-ledger-head" style={{ marginBottom: '2px' }}>
+          {meta.workYear} 년 {meta.workMonth} 월 노무비 지급대장
+        </div>
         <table className="labor-ledger-meta" style={{ marginBottom: '2px' }}>
           <tbody>
             <tr>
               <td style={{ width: '12%' }}>회사명</td>
-              <td style={{ width: '17%' }}>{meta.companyName || '-'}</td>
+              <td style={{ width: '22%' }}>{meta.companyName || '-'}</td>
               <td style={{ width: '10%' }}>현장명</td>
-              <td style={{ width: '17%' }}>{meta.siteName || '-'}</td>
-              <td className="labor-ledger-head" style={{ width: '29%' }}>
-                {meta.workYear} 년 {meta.workMonth} 월 노무비 지급대장
-              </td>
-              <td style={{ width: '5%' }}>기간</td>
-              <td style={{ width: '10%' }}>
-                {meta.workYear}년 {meta.workMonth}월 1일 부터
-                <br />
+              <td style={{ width: '22%' }}>{meta.siteName || '-'}</td>
+              <td style={{ width: '10%' }}>기간</td>
+              <td style={{ width: '24%' }}>
+                {meta.workYear}년 {meta.workMonth}월 1일 부터 ~
                 {meta.workYear}년 {meta.workMonth}월 31일 까지
               </td>
             </tr>
@@ -178,65 +178,80 @@ export default function LaborLedgerDocument({
           </tbody>
         </table>
 
+        {/* Column order: NO | 오류 | 성명 | 주민번호 | 주소 | 일당 | [16 stacked day cols] | 총공수 | 일수 | 노무비총액 | 고용/갑근 | 건강/주민 | 국민/장기 | 공제합계 | 차감지급액 | 비고 */}
         <table className="labor-ledger-table">
           <thead>
+            {/* Row 0: tall headers + "일자" colspan + tall summary + 3 split deduction headers + tall end headers */}
             <tr>
-              <th rowSpan={3} style={{ width: '2%' }}>NO.</th>
-              <th rowSpan={3} style={{ width: '3%' }}>오류</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '4%' }}>성명</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '8%' }}>주민번호</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '14%' }}>주소</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '5%' }}>일당</th>
+              <th rowSpan={2} style={{ width: '2%' }}>NO.</th>
+              <th rowSpan={2} style={{ width: '3%' }}>오류</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '4%' }}>성명</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '8%' }}>주민번호</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '14%' }}>주소</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '5%' }}>일당</th>
               <th colSpan={16} className="labor-ledger-gray">일자</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '3%' }}>총공수</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '3%' }}>일수</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '6%' }}>노무비총액</th>
-              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '4%' }}>고용보험</th>
-              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '4%' }}>건강보험</th>
-              <th colSpan={2} className="labor-ledger-blue" style={{ width: '6%' }}>국민연금</th>
-              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '4%' }}>장기요양보험료</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '5%' }}>공제합계</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '6%' }}>차감지급액</th>
-              <th rowSpan={3} className="labor-ledger-blue" style={{ width: '3%' }}>비고</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '3%' }}>총공수</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '3%' }}>일수</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '6%' }}>노무비총액</th>
+              {/* 3 stacked deduction headers — rowSpan=2, split layout shows 2 labels per cell */}
+              <th rowSpan={2} className="labor-ledger-blue labor-ledger-split" style={{ width: '5%' }}>
+                <div>고용보험</div>
+                <div>갑근세</div>
+              </th>
+              <th rowSpan={2} className="labor-ledger-blue labor-ledger-split" style={{ width: '5%' }}>
+                <div>건강보험</div>
+                <div>주민세</div>
+              </th>
+              <th rowSpan={2} className="labor-ledger-blue labor-ledger-split" style={{ width: '5%' }}>
+                <div>국민연금</div>
+                <div>장기요양보험료</div>
+              </th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '5%' }}>공제합계</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '6%' }}>차감지급액</th>
+              <th rowSpan={2} className="labor-ledger-blue" style={{ width: '3%' }}>비고</th>
             </tr>
+            {/* Row 1: only the 16 day pair cells */}
             <tr>
-              {dayPairs.map(({ topDay, bottomDay }) => (
-                <th key={`day-pair-${topDay}`} className="labor-ledger-yellow labor-ledger-tiny labor-ledger-split">
-                  <div>{topDay}</div>
-                  <div>{bottomDay ?? ''}</div>
+              {dayPairs.map(({ topDay, bottomDay }, index) => (
+                <th key={`day-pair-${index}`} className="labor-ledger-yellow labor-ledger-tiny labor-ledger-split">
+                  <div>{topDay !== null ? topDay : '※'}</div>
+                  <div>{bottomDay !== null ? bottomDay : ''}</div>
                 </th>
               ))}
-              <th className="labor-ledger-tiny">고용보험</th>
-              <th className="labor-ledger-tiny">건강보험</th>
-              <th className="labor-ledger-tiny">갑근세</th>
-              <th className="labor-ledger-tiny">주민세</th>
-              <th className="labor-ledger-tiny">장기요양</th>
             </tr>
           </thead>
           <tbody>
             {ledgerRows.map((row, index) => (
               <Fragment key={row.worker.id}>
-                <tr key={`${row.worker.id}-stacked`}>
+                <tr>
                   <td>{index + 1}</td>
                   <td></td>
                   <td>{row.worker.name || '-'}</td>
                   <td>{row.worker.residentId || '-'}</td>
                   <td className="labor-ledger-left">{row.worker.address || '-'}</td>
                   <td className="labor-ledger-right">{row.worker.dailyWage ? formatCurrency(row.worker.dailyWage) : '-'}</td>
-                  {dayPairs.map(({ topDay, bottomDay }) => (
-                    <td key={`${row.worker.id}-${topDay}`} className="labor-ledger-tiny labor-ledger-split">
-                      <div>{formatDayCell(getEntryUnits(entries, row.worker.id, topDay))}</div>
-                      <div>{bottomDay ? formatDayCell(getEntryUnits(entries, row.worker.id, bottomDay)) : ''}</div>
+                  {dayPairs.map(({ topDay, bottomDay }, pairIndex) => (
+                    <td key={`${row.worker.id}-pair-${pairIndex}`} className="labor-ledger-tiny labor-ledger-split">
+                      <div>{topDay !== null ? formatDayCell(getEntryUnits(entries, row.worker.id, topDay)) : ''}</div>
+                      <div>{bottomDay !== null ? formatDayCell(getEntryUnits(entries, row.worker.id, bottomDay)) : ''}</div>
                     </td>
                   ))}
                   <td>{row.totalUnits || ''}</td>
                   <td>{row.totalDays || ''}</td>
                   <td className="labor-ledger-right">{row.grossPay ? formatCurrency(row.grossPay) : '-'}</td>
-                  <td className="labor-ledger-right">{row.employmentInsurance ? formatCurrency(row.employmentInsurance) : '-'}</td>
-                  <td className="labor-ledger-right">{row.healthInsurance ? formatCurrency(row.healthInsurance) : '-'}</td>
-                  <td className="labor-ledger-right">{row.nationalPension ? formatCurrency(row.nationalPension) : '-'}</td>
-                  <td className="labor-ledger-right">{row.localIncomeTax ? formatCurrency(row.localIncomeTax) : '-'}</td>
-                  <td className="labor-ledger-right">{row.longTermCare ? formatCurrency(row.longTermCare) : '-'}</td>
+                  {/* 3 stacked deduction cells */}
+                  <td className="labor-ledger-tiny labor-ledger-split">
+                    <div className="labor-ledger-right">{row.employmentInsurance ? formatCurrency(row.employmentInsurance) : ''}</div>
+                    <div className="labor-ledger-right">{row.incomeTax ? formatCurrency(row.incomeTax) : ''}</div>
+                  </td>
+                  <td className="labor-ledger-tiny labor-ledger-split">
+                    <div className="labor-ledger-right">{row.healthInsurance ? formatCurrency(row.healthInsurance) : ''}</div>
+                    <div className="labor-ledger-right">{row.localIncomeTax ? formatCurrency(row.localIncomeTax) : ''}</div>
+                  </td>
+                  <td className="labor-ledger-tiny labor-ledger-split">
+                    <div className="labor-ledger-right">{row.nationalPension ? formatCurrency(row.nationalPension) : ''}</div>
+                    <div className="labor-ledger-right">{row.longTermCare ? formatCurrency(row.longTermCare) : ''}</div>
+                  </td>
                   <td className="labor-ledger-right">{row.totalDeduction ? formatCurrency(row.totalDeduction) : '-'}</td>
                   <td className="labor-ledger-right">{row.netPay ? formatCurrency(row.netPay) : '-'}</td>
                   <td></td>
@@ -251,8 +266,8 @@ export default function LaborLedgerDocument({
                 <td></td>
                 <td></td>
                 <td></td>
-                {dayPairs.map(({ topDay }) => (
-                  <td key={`f-${fillerIndex}-${topDay}`} className="labor-ledger-tiny labor-ledger-split">
+                {dayPairs.map((_, pairIndex) => (
+                  <td key={`f-${fillerIndex}-${pairIndex}`} className="labor-ledger-tiny labor-ledger-split">
                     <div></div>
                     <div></div>
                   </td>
@@ -260,26 +275,43 @@ export default function LaborLedgerDocument({
                 <td></td>
                 <td></td>
                 <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                {/* 3 stacked deduction cells */}
+                <td className="labor-ledger-tiny labor-ledger-split">
+                  <div></div>
+                  <div></div>
+                </td>
+                <td className="labor-ledger-tiny labor-ledger-split">
+                  <div></div>
+                  <div></div>
+                </td>
+                <td className="labor-ledger-tiny labor-ledger-split">
+                  <div></div>
+                  <div></div>
+                </td>
                 <td></td>
                 <td></td>
                 <td></td>
               </tr>
             ))}
             <tr className="labor-ledger-gray">
+              {/* colSpan=22: NO(1) + 오류(1) + 성명(1) + 주민번호(1) + 주소(1) + 일당(1) + 16 day cols = 22 */}
               <td colSpan={22} className="labor-ledger-left" style={{ paddingLeft: '4px' }}>합계</td>
               <td>{totals.totalUnits || ''}</td>
               <td></td>
               <td className="labor-ledger-right">{totals.grossPay ? formatCurrency(totals.grossPay) : '-'}</td>
-              <td className="labor-ledger-right">{totals.employmentInsurance ? formatCurrency(totals.employmentInsurance) : '-'}</td>
-              <td className="labor-ledger-right">{totals.healthInsurance ? formatCurrency(totals.healthInsurance) : '-'}</td>
-              <td className="labor-ledger-right">{totals.nationalPension ? formatCurrency(totals.nationalPension) : '-'}</td>
-              <td className="labor-ledger-right">{totals.localIncomeTax ? formatCurrency(totals.localIncomeTax) : '-'}</td>
-              <td className="labor-ledger-right">{totals.longTermCare ? formatCurrency(totals.longTermCare) : '-'}</td>
+              {/* 3 stacked deduction totals */}
+              <td className="labor-ledger-tiny labor-ledger-split">
+                <div className="labor-ledger-right">{totals.employmentInsurance ? formatCurrency(totals.employmentInsurance) : ''}</div>
+                <div className="labor-ledger-right">{totals.incomeTax ? formatCurrency(totals.incomeTax) : ''}</div>
+              </td>
+              <td className="labor-ledger-tiny labor-ledger-split">
+                <div className="labor-ledger-right">{totals.healthInsurance ? formatCurrency(totals.healthInsurance) : ''}</div>
+                <div className="labor-ledger-right">{totals.localIncomeTax ? formatCurrency(totals.localIncomeTax) : ''}</div>
+              </td>
+              <td className="labor-ledger-tiny labor-ledger-split">
+                <div className="labor-ledger-right">{totals.nationalPension ? formatCurrency(totals.nationalPension) : ''}</div>
+                <div className="labor-ledger-right">{totals.longTermCare ? formatCurrency(totals.longTermCare) : ''}</div>
+              </td>
               <td className="labor-ledger-right">{totals.totalDeduction ? formatCurrency(totals.totalDeduction) : '-'}</td>
               <td className="labor-ledger-right">{totals.netPay ? formatCurrency(totals.netPay) : '-'}</td>
               <td></td>

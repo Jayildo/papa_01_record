@@ -29,3 +29,13 @@ dist-ssr
 .env*.local
 .env.backup
 backups/
+
+# Dev/test artifacts
+.playwright-cli/
+example/
+260329/
+test-output.pdf
+pdf_page1.png
+result_example_01.png
+supabase/.temp/
+*.pdf
