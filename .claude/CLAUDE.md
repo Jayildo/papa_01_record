@@ -23,7 +23,19 @@ src/
     ├── PinScreen.tsx         # PIN 인증 화면
     ├── InputTab.tsx          # 입력탭: 모바일 카드/데스크톱 테이블, PNG/PDF/공유 내보내기
     ├── ResultTab.tsx         # 결과탭: 집계표, 핀치줌, PNG/PDF/공유 내보내기
-    └── LocationComboBox.tsx  # 위치 자동완성 콤보박스
+    ├── LocationComboBox.tsx  # 위치 자동완성 콤보박스
+    ├── WorklogWorkbench.tsx  # 작업일지 워크스페이스 (서브탭 컨테이너)
+    ├── WorklogInput.tsx      # 작업일지 입력 폼 (헤더 + 인력 + 장비/자재)
+    ├── WorklogMonthly.tsx    # 월별 통계 (카드 + Top N 현장 + 일자별 드릴다운)
+    └── WorklogImport.tsx     # CSV 업로드 UI (파싱 미리보기 + 가져오기)
+
+scripts/
+└── importWorklogCsv.ts   # 일회성 CSV 이관 스크립트 (npx tsx scripts/importWorklogCsv.ts [--commit])
+
+supabase/migrations/014_worklog_base.sql  # work_logs, work_log_laborers, work_log_items + RLS
+src/lib/worklogSupabase.ts               # fetch/upsert/delete/bulkImport
+src/utils/worklogCsvParser.ts            # CSV → WorkLog[] (수작업 파서, 외부 의존성 없음)
+src/utils/worklogStats.ts                # computeMonthlyStats, listMonths 순수 함수
 ```
 
 ## 주요 패턴

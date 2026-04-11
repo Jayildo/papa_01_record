@@ -35,3 +35,38 @@ export const DIAMETER_LABELS: Record<DiameterRange, string> = {
 };
 
 export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error';
+
+export interface WorkLogLaborer {
+  id: string;
+  name: string;
+  residentId?: string;
+  company?: string;
+  dailyWage?: number;
+  note?: string;
+  sortOrder: number;
+}
+
+export interface WorkLogItem {
+  id: string;
+  category?: string;
+  detail?: string;
+  unit?: string;
+  qty?: number;
+  amount?: number;
+  note?: string;
+  sortOrder: number;
+}
+
+export interface WorkLog {
+  id: string;
+  externalId?: string;
+  workDate: string;
+  weather?: string;
+  temperature?: string;
+  location?: string;
+  workDesc?: string;
+  totalAmount?: number;
+  note?: string;
+  laborers: WorkLogLaborer[];
+  items: WorkLogItem[];
+}

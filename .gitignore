@@ -39,3 +39,7 @@ pdf_page1.png
 result_example_01.png
 supabase/.temp/
 *.pdf
+.gstack/
+.claude/settings.local.json
+# 작업일지 원본 CSV — 주민등록번호 등 PII 포함, 커밋 금지
+작업일지_*.csv

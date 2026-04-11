@@ -11,6 +11,7 @@ import PinScreen, { isAuthed } from './components/PinScreen';
 import SyncIndicator from './components/SyncIndicator';
 import HistoryPanel from './components/HistoryPanel';
 import LaborWorkbench from './components/LaborWorkbench';
+import WorklogWorkbench from './components/WorklogWorkbench';
 import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -52,7 +53,7 @@ function loadDark(): boolean {
 }
 
 type Tab = 'input' | 'result';
-type Workspace = 'tree' | 'labor';
+type Workspace = 'tree' | 'labor' | 'worklog';
 
 function WorkspaceTabs({
   active,
@@ -75,6 +76,9 @@ function WorkspaceTabs({
       </button>
       <button className={tabClass('labor')} onClick={() => onChange('labor')}>
         노무비
+      </button>
+      <button className={tabClass('worklog')} onClick={() => onChange('worklog')}>
+        작업일지
       </button>
     </div>
   );
@@ -579,6 +583,28 @@ function AppContent() {
   );
 
   // 로딩
+  if (workspace === 'worklog') {
+    return (
+      <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
+        <div className="max-w-7xl mx-auto p-4">
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">작업일지</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  현장 작업일지 입력 및 월별 통계
+                </p>
+              </div>
+              {darkToggle}
+            </div>
+            <WorkspaceTabs active={workspace} onChange={setWorkspace} />
+          </div>
+          <WorklogWorkbench />
+        </div>
+      </div>
+    );
+  }
+
   if (workspace === 'labor') {
     return (
       <div className="min-h-dvh bg-gray-50 dark:bg-gray-900 transition-colors">
