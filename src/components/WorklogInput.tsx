@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { WorkLog, WorkLogItem, WorkLogLaborer } from '../types';
-import { upsertWorkLog, deleteWorkLog } from '../lib/worklogSupabase';
+import { upsertWorkLog, deleteWorkLog, sealWorkLog } from '../lib/worklogSupabase';
 import LocationComboBox from './LocationComboBox';
 
 interface Props {
@@ -46,6 +46,9 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [sealing, setSealing] = useState(false);
+
+  const isSealed = form.sealed === true;
 
   const locations = Array.from(new Set(logs.map((l) => l.location).filter(Boolean) as string[]));
 
@@ -152,7 +155,39 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
     }
   }
 
-  const inputClass = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500';
+  async function handleSeal() {
+    if (!selectedLogId) return;
+    if (!confirm('확정 후에는 편집할 수 없습니다. 계속하시겠습니까?')) return;
+    setSealing(true);
+    try {
+      await sealWorkLog(selectedLogId, true);
+      setForm((prev) => ({ ...prev, sealed: true }));
+      onReload();
+      showToast('확정되었습니다.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '확정 오류');
+    } finally {
+      setSealing(false);
+    }
+  }
+
+  async function handleUnseal() {
+    if (!selectedLogId) return;
+    if (!confirm('확정을 해제하면 다시 편집 가능해집니다. 해제하시겠습니까?')) return;
+    setSealing(true);
+    try {
+      await sealWorkLog(selectedLogId, false);
+      setForm((prev) => ({ ...prev, sealed: false }));
+      onReload();
+      showToast('확정이 해제되었습니다.');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '해제 오류');
+    } finally {
+      setSealing(false);
+    }
+  }
+
+  const inputClass = 'w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 disabled:opacity-60 disabled:cursor-not-allowed';
   const labelClass = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1';
 
   return (
@@ -183,7 +218,10 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                     : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                 }`}
               >
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{log.workDate}</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                  {log.sealed && <span title="확정됨">🔒</span>}
+                  {log.workDate}
+                </p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
                   {log.location ?? '(장소 없음)'}
                 </p>
@@ -195,6 +233,45 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
 
       {/* 편집 폼 */}
       <div className="flex-1 min-w-0">
+        {/* 확정 배너 */}
+        {selectedLogId && (
+          <div className={`rounded-xl border px-4 py-3 mb-4 flex items-center justify-between ${
+            isSealed
+              ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
+              : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50'
+          }`}>
+            <div className="flex items-center gap-2">
+              {isSealed ? (
+                <>
+                  <span className="text-lg">🔒</span>
+                  <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">확정됨 — 편집 잠김</span>
+                </>
+              ) : (
+                <span className="text-sm text-gray-500 dark:text-gray-400">미확정 — 편집 가능</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {isSealed ? (
+                <button
+                  onClick={handleUnseal}
+                  disabled={sealing}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-gray-700 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 cursor-pointer disabled:opacity-50"
+                >
+                  {sealing ? '처리 중...' : '확정 해제'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSeal}
+                  disabled={sealing}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white cursor-pointer hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {sealing ? '처리 중...' : '확정'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 헤더 필드 */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mb-4">
           <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4 text-sm">헤더 정보</h3>
@@ -204,6 +281,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
               <input
                 type="date"
                 value={form.workDate}
+                disabled={isSealed}
                 onChange={(e) => setField('workDate', e.target.value)}
                 className={inputClass}
               />
@@ -213,6 +291,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
               <input
                 type="text"
                 value={form.weather ?? ''}
+                disabled={isSealed}
                 onChange={(e) => setField('weather', e.target.value || undefined)}
                 placeholder="맑음"
                 className={inputClass}
@@ -223,6 +302,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
               <input
                 type="text"
                 value={form.temperature ?? ''}
+                disabled={isSealed}
                 onChange={(e) => setField('temperature', e.target.value || undefined)}
                 placeholder="-11 ~ 2"
                 className={inputClass}
@@ -236,12 +316,14 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                 onChange={(v) => setField('location', v || undefined)}
                 className={inputClass}
                 placeholder="현장 주소 또는 이름"
+                disabled={isSealed}
               />
             </div>
             <div className="col-span-2 sm:col-span-3">
               <label className={labelClass}>작업내용</label>
               <textarea
                 value={form.workDesc ?? ''}
+                disabled={isSealed}
                 onChange={(e) => setField('workDesc', e.target.value || undefined)}
                 rows={2}
                 placeholder="작업 내용을 입력하세요"
@@ -255,6 +337,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="checkbox"
                     checked={overrideTotal}
+                    disabled={isSealed}
                     onChange={(e) => {
                       setOverrideTotal(e.target.checked);
                       if (!e.target.checked) setField('totalAmount', undefined);
@@ -267,6 +350,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="number"
                     value={form.totalAmount ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setField('totalAmount', e.target.value ? Number(e.target.value) : undefined)}
                     className={inputClass + ' w-40'}
                     min={0}
@@ -288,7 +372,8 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">투입 인력</h3>
             <button
               onClick={addLaborer}
-              className="text-xs px-2.5 py-1 rounded bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 cursor-pointer"
+              disabled={isSealed}
+              className="text-xs px-2.5 py-1 rounded bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               + 행 추가
             </button>
@@ -302,6 +387,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                       list="worker-names-list"
                       type="text"
                       value={laborer.name}
+                      disabled={isSealed}
                       onChange={(e) => setLaborer(idx, { name: e.target.value })}
                       placeholder="이름"
                       className={inputClass}
@@ -310,6 +396,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="text"
                     value={laborer.residentId ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setLaborer(idx, { residentId: e.target.value || undefined })}
                     placeholder="주민등록번호"
                     className={inputClass}
@@ -317,6 +404,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="text"
                     value={laborer.company ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setLaborer(idx, { company: e.target.value || undefined })}
                     placeholder="소속"
                     className={inputClass}
@@ -324,6 +412,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="number"
                     value={laborer.dailyWage ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setLaborer(idx, { dailyWage: e.target.value ? Number(e.target.value) : undefined })}
                     placeholder="일당"
                     className={inputClass}
@@ -333,7 +422,8 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                 </div>
                 <button
                   onClick={() => removeLaborer(idx)}
-                  className="mt-0.5 text-red-400 hover:text-red-600 cursor-pointer px-1 py-2 shrink-0 text-lg leading-none"
+                  disabled={isSealed}
+                  className="mt-0.5 text-red-400 hover:text-red-600 cursor-pointer px-1 py-2 shrink-0 text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
                   title="삭제"
                 >
                   ×
@@ -352,7 +442,8 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">장비 / 자재 / 기타</h3>
             <button
               onClick={addItem}
-              className="text-xs px-2.5 py-1 rounded bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 cursor-pointer"
+              disabled={isSealed}
+              className="text-xs px-2.5 py-1 rounded bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               + 행 추가
             </button>
@@ -363,6 +454,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                 <div className="flex-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
                   <select
                     value={item.category ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setItem(idx, { category: e.target.value || undefined })}
                     className={inputClass}
                   >
@@ -374,6 +466,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="text"
                     value={item.detail ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setItem(idx, { detail: e.target.value || undefined })}
                     placeholder="세부"
                     className={inputClass}
@@ -381,6 +474,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="text"
                     value={item.unit ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setItem(idx, { unit: e.target.value || undefined })}
                     placeholder="단위"
                     className={inputClass}
@@ -388,6 +482,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="number"
                     value={item.qty ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setItem(idx, { qty: e.target.value ? Number(e.target.value) : undefined })}
                     placeholder="수량"
                     className={inputClass}
@@ -396,6 +491,7 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                   <input
                     type="number"
                     value={item.amount ?? ''}
+                    disabled={isSealed}
                     onChange={(e) => setItem(idx, { amount: e.target.value ? Number(e.target.value) : undefined })}
                     placeholder="금액"
                     className={inputClass}
@@ -405,7 +501,8 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
                 </div>
                 <button
                   onClick={() => removeItem(idx)}
-                  className="mt-0.5 text-red-400 hover:text-red-600 cursor-pointer px-1 py-2 shrink-0 text-lg leading-none"
+                  disabled={isSealed}
+                  className="mt-0.5 text-red-400 hover:text-red-600 cursor-pointer px-1 py-2 shrink-0 text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
                   title="삭제"
                 >
                   ×
@@ -416,27 +513,29 @@ export default function WorklogInput({ logs, workerNames, selectedLogId, onSelec
         </div>
 
         {/* 저장/삭제 버튼 */}
-        <div className="flex gap-3">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium cursor-pointer
-              active:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            {saving ? '저장 중...' : '저장'}
-          </button>
-          {selectedLogId && (
+        {!isSealed && (
+          <div className="flex gap-3">
             <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="px-5 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400
-                border border-red-200 dark:border-red-700 rounded-xl font-medium cursor-pointer
-                active:bg-red-100 dark:active:bg-red-900/40 disabled:opacity-50 text-sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium cursor-pointer
+                active:bg-blue-700 disabled:opacity-50 text-sm"
             >
-              {deleting ? '삭제 중...' : '삭제'}
+              {saving ? '저장 중...' : '저장'}
             </button>
-          )}
-        </div>
+            {selectedLogId && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-5 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400
+                  border border-red-200 dark:border-red-700 rounded-xl font-medium cursor-pointer
+                  active:bg-red-100 dark:active:bg-red-900/40 disabled:opacity-50 text-sm"
+              >
+                {deleting ? '삭제 중...' : '삭제'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Toast */}
         {toast && (

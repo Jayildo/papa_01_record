@@ -6,9 +6,10 @@ interface Props {
   onChange: (value: string) => void;
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-export default function LocationComboBox({ value, options, onChange, className = '', placeholder }: Props) {
+export default function LocationComboBox({ value, options, onChange, className = '', placeholder, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -33,8 +34,9 @@ export default function LocationComboBox({ value, options, onChange, className =
         ref={inputRef}
         type="text"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { if (!disabled) setOpen(true); }}
         role="combobox"
         aria-expanded={open}
         className={className}

@@ -67,6 +67,7 @@ export interface WorkLog {
   workDesc?: string;
   totalAmount?: number;
   note?: string;
+  sealed?: boolean;  // 확정 상태 — true이면 수정 불가
   laborers: WorkLogLaborer[];
   items: WorkLogItem[];
 }

@@ -32,6 +32,7 @@ import {
   saveLaborCompany,
   saveLaborPoolWorker,
   saveLaborProjectBundle,
+  sealLaborProject,
 } from '../lib/laborSupabase';
 import LaborLedgerDocument from './LaborLedgerDocument';
 import LaborPrintSheets from './LaborPrintSheets';
@@ -213,6 +214,7 @@ export default function LaborWorkbench() {
   const [reportPdfUrl, setReportPdfUrl] = useState<string | null>(null);
   const [reportPdfLoading, setReportPdfLoading] = useState(false);
   const [showCalibrator, setShowCalibrator] = useState(false);
+  const [sealing, setSealing] = useState(false);
 
   // Company master state
   const [companies, setCompanies] = useState<LaborCompany[]>([]);
@@ -232,6 +234,7 @@ export default function LaborWorkbench() {
   const [poolPickerSelected, setPoolPickerSelected] = useState<Set<string>>(new Set());
 
   const selectedProject = useMemo(() => projects.find((project) => project.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
+  const isProjectSealed = selectedProject?.sealed === true;
   const validWorkers = useMemo(() => workers.filter((worker) => worker.name.trim() !== ''), [workers]);
   const days = useMemo(() => Array.from({ length: getDaysInMonth(meta.workYear, meta.workMonth) }, (_, index) => index + 1), [meta.workMonth, meta.workYear]);
   const ledgerRows = useMemo(() => buildLedgerRows(workers, entries), [workers, entries]);
@@ -509,6 +512,38 @@ export default function LaborWorkbench() {
     window.setTimeout(() => window.print(), 50);
   };
 
+  const handleSealProject = async () => {
+    if (!selectedProject) return;
+    if (!confirm('확정 후에는 노무비 데이터를 편집할 수 없습니다. 계속하시겠습니까?')) return;
+    setSealing(true);
+    try {
+      await sealLaborProject(selectedProject.id, true);
+      setProjects((prev) => prev.map((p) => p.id === selectedProject.id ? { ...p, sealed: true } : p));
+      setNotice({ tone: 'success', message: '프로젝트가 확정되었습니다.' });
+    } catch (error) {
+      console.error('LaborWorkbench seal:', error);
+      setNotice({ tone: 'error', message: '확정에 실패했습니다.' });
+    } finally {
+      setSealing(false);
+    }
+  };
+
+  const handleUnsealProject = async () => {
+    if (!selectedProject) return;
+    if (!confirm('확정을 해제하면 다시 편집 가능해집니다. 해제하시겠습니까?')) return;
+    setSealing(true);
+    try {
+      await sealLaborProject(selectedProject.id, false);
+      setProjects((prev) => prev.map((p) => p.id === selectedProject.id ? { ...p, sealed: false } : p));
+      setNotice({ tone: 'success', message: '프로젝트 확정이 해제되었습니다.' });
+    } catch (error) {
+      console.error('LaborWorkbench unseal:', error);
+      setNotice({ tone: 'error', message: '확정 해제에 실패했습니다.' });
+    } finally {
+      setSealing(false);
+    }
+  };
+
   const handleCreateProject = async () => {
     const name = window.prompt('새 노무비 프로젝트 이름', projectName);
     if (!name?.trim()) return;
@@ -773,20 +808,25 @@ export default function LaborWorkbench() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={handleCreateProject} className="cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">프로젝트 생성</button>
-            <button onClick={handleDeleteProject} disabled={!selectedProject} className="cursor-pointer rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900">프로젝트 삭제</button>
-            <button onClick={handleSave} disabled={saving || !selectedProject} className="cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? '저장 중...' : 'Supabase 저장'}</button>
+            <button onClick={handleDeleteProject} disabled={!selectedProject || isProjectSealed} className="cursor-pointer rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900">프로젝트 삭제</button>
+            {isProjectSealed ? (
+              <button onClick={handleUnsealProject} disabled={sealing || !selectedProject} className="cursor-pointer rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:bg-gray-900 dark:text-amber-300">{sealing ? '처리 중...' : '🔒 확정 해제'}</button>
+            ) : (
+              <button onClick={handleSealProject} disabled={sealing || !selectedProject} className="cursor-pointer rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{sealing ? '처리 중...' : '확정'}</button>
+            )}
+            <button onClick={handleSave} disabled={saving || !selectedProject || isProjectSealed} className="cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? '저장 중...' : 'Supabase 저장'}</button>
           </div>
         </div>
 
         <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr]">
           <LabeledSelect label="프로젝트" value={selectedProjectId ?? ''} onChange={(value) => setSelectedProjectId(value || null)} options={[{ value: '', label: '선택하세요' }, ...projects.map((project) => ({ value: project.id, label: `${project.name} (${project.workYear}.${String(project.workMonth).padStart(2, '0')})` }))]} />
-          <LabeledInput label="프로젝트명" value={projectName} onChange={setProjectName} disabled={!selectedProject} />
+          <LabeledInput label="프로젝트명" value={projectName} onChange={setProjectName} disabled={!selectedProject || isProjectSealed} />
         </div>
 
         {notice && <Notice tone={notice.tone} message={notice.message} />}
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-700"><div className="text-xs text-gray-500 dark:text-gray-400">상태</div><div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{selectedProject ? '편집 가능' : '프로젝트 없음'}</div></div>
+          <div className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-700"><div className="text-xs text-gray-500 dark:text-gray-400">상태</div><div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{!selectedProject ? '프로젝트 없음' : isProjectSealed ? '🔒 확정됨' : '편집 가능'}</div></div>
           <div className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-700"><div className="text-xs text-gray-500 dark:text-gray-400">근로자</div><div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{validWorkers.length}명</div></div>
           <div className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-700"><div className="text-xs text-gray-500 dark:text-gray-400">총 공수</div><div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{totals.totalUnits}</div></div>
           <div className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-700"><div className="text-xs text-gray-500 dark:text-gray-400">차감지급 총액</div><div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(totals.netPay)}원</div></div>

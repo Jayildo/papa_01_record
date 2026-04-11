@@ -300,6 +300,15 @@ export async function archiveLaborProject(projectId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function sealLaborProject(projectId: string, sealed: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('labor_projects')
+    .update({ sealed })
+    .eq('id', projectId);
+
+  if (error) throw error;
+}
+
 export async function getLaborProjectBundle(projectId: string): Promise<LaborProjectBundle> {
   const { data: projectData, error: projectError } = await supabase
     .from('labor_projects')

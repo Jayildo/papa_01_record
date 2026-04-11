@@ -12,5 +12,16 @@
         { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
       ]
     }
-  ]
+  ],
+  "crons": [
+    {
+      "path": "/api/backup-daily",
+      "schedule": "0 18 * * *"
+    }
+  ],
+  "functions": {
+    "api/backup-daily.ts": {
+      "maxDuration": 60
+    }
+  }
 }

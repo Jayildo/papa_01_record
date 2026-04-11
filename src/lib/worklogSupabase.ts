@@ -11,6 +11,7 @@ type WorkLogRow = {
   work_desc: string | null;
   total_amount: number | null;
   note: string | null;
+  sealed: boolean | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -54,6 +55,7 @@ function mapLog(
     workDesc: row.work_desc ?? undefined,
     totalAmount: row.total_amount != null ? Number(row.total_amount) : undefined,
     note: row.note ?? undefined,
+    sealed: row.sealed ?? false,
     laborers,
     items,
   };
@@ -104,6 +106,7 @@ export async function fetchWorkLogs(from?: string, to?: string): Promise<WorkLog
     .from('work_log_laborers')
     .select('*')
     .in('log_id', logIds)
+    .is('deleted_at', null)
     .order('sort_order', { ascending: true });
   if (laborerError) throw laborerError;
 
@@ -111,6 +114,7 @@ export async function fetchWorkLogs(from?: string, to?: string): Promise<WorkLog
     .from('work_log_items')
     .select('*')
     .in('log_id', logIds)
+    .is('deleted_at', null)
     .order('sort_order', { ascending: true });
   if (itemError) throw itemError;
 
@@ -154,16 +158,20 @@ export async function upsertWorkLog(log: WorkLog): Promise<void> {
     );
   if (logError) throw logError;
 
+  // soft-delete 기존 자식 행 (prevent_hard_delete 트리거로 hard delete 차단됨)
+  const now = new Date().toISOString();
   const { error: delLaborers } = await supabase
     .from('work_log_laborers')
-    .delete()
-    .eq('log_id', logId);
+    .update({ deleted_at: now })
+    .eq('log_id', logId)
+    .is('deleted_at', null);
   if (delLaborers) throw delLaborers;
 
   const { error: delItems } = await supabase
     .from('work_log_items')
-    .delete()
-    .eq('log_id', logId);
+    .update({ deleted_at: now })
+    .eq('log_id', logId)
+    .is('deleted_at', null);
   if (delItems) throw delItems;
 
   if (log.laborers.length > 0) {
@@ -204,6 +212,14 @@ export async function deleteWorkLog(id: string): Promise<void> {
   const { error } = await supabase
     .from('work_logs')
     .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function sealWorkLog(id: string, sealed: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('work_logs')
+    .update({ sealed })
     .eq('id', id);
   if (error) throw error;
 }
