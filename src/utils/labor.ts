@@ -103,14 +103,14 @@ export function buildResolvedMeta(meta: LaborProjectMeta, company: LaborCompany 
     companyPhoneMobile: company?.companyPhoneMobile ?? '',
     companyFax: company?.companyFax ?? '',
     workplaceManagementNumber: company?.workplaceManagementNumber ?? '',
-    siteName: meta.siteName,
+    siteName: meta.siteName ?? '',
     workYear: meta.workYear,
     workMonth: meta.workMonth,
-    managerName: meta.managerName,
-    paymentDate: meta.paymentDate,
-    managerResidentId: meta.managerResidentId,
-    managerTitle: meta.managerTitle,
-    managerJobDescription: meta.managerJobDescription,
+    managerName: meta.managerName ?? '',
+    paymentDate: meta.paymentDate ?? '',
+    managerResidentId: meta.managerResidentId ?? '',
+    managerTitle: meta.managerTitle ?? '',
+    managerJobDescription: meta.managerJobDescription ?? '',
   };
 }
 

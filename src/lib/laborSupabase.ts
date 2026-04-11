@@ -84,50 +84,50 @@ type LaborEntryRow = {
 function mapCompany(row: LaborCompanyRow): LaborCompany {
   return {
     id: row.id,
-    companyName: row.company_name,
-    representativeName: row.representative_name,
-    businessRegistrationNumber: row.business_registration_number,
-    companyAddress: row.company_address,
-    companyPhone: row.company_phone,
-    companyPhoneMobile: row.company_phone_mobile,
-    companyFax: row.company_fax,
-    workplaceManagementNumber: row.workplace_management_number,
+    companyName: row.company_name ?? '',
+    representativeName: row.representative_name ?? '',
+    businessRegistrationNumber: row.business_registration_number ?? '',
+    companyAddress: row.company_address ?? '',
+    companyPhone: row.company_phone ?? '',
+    companyPhoneMobile: row.company_phone_mobile ?? '',
+    companyFax: row.company_fax ?? '',
+    workplaceManagementNumber: row.workplace_management_number ?? '',
   };
 }
 
 function mapPoolWorker(row: LaborPoolWorkerRow): LaborPoolWorker {
   return {
     id: row.id,
-    name: row.name,
-    residentId: row.resident_id,
-    phone: row.phone,
-    address: row.address,
-    jobType: row.job_type,
-    teamName: row.team_name,
-    bankName: row.bank_name,
-    accountNumber: row.account_number,
-    accountHolder: row.account_holder,
-    employmentDurationType: row.employment_duration_type,
-    workplaceType: row.workplace_type,
-    defaultDailyWage: Number(row.default_daily_wage),
+    name: row.name ?? '',
+    residentId: row.resident_id ?? '',
+    phone: row.phone ?? '',
+    address: row.address ?? '',
+    jobType: row.job_type ?? '',
+    teamName: row.team_name ?? '',
+    bankName: row.bank_name ?? '',
+    accountNumber: row.account_number ?? '',
+    accountHolder: row.account_holder ?? '',
+    employmentDurationType: row.employment_duration_type ?? 'under_1_month',
+    workplaceType: row.workplace_type ?? 'construction',
+    defaultDailyWage: Number(row.default_daily_wage ?? 0),
   };
 }
 
 function mapProject(row: LaborProjectRow): LaborProjectRecord {
   return {
     id: row.id,
-    name: row.name,
+    name: row.name ?? '',
     companyId: row.company_id ?? null,
-    siteName: row.site_name,
+    siteName: row.site_name ?? '',
     workYear: row.work_year,
     workMonth: row.work_month,
-    managerName: row.manager_name,
+    managerName: row.manager_name ?? '',
     paymentDate: row.payment_date ?? '',
     managerResidentId: row.manager_resident_id ?? '',
     managerTitle: row.manager_title ?? '',
     managerJobDescription: row.manager_job_description ?? '',
     createdAt: row.created_at,
-    sealed: row.sealed,
+    sealed: row.sealed ?? false,
   };
 }
 
@@ -135,24 +135,24 @@ function mapWorker(row: LaborWorkerRow): LaborWorker {
   return {
     id: row.id,
     poolWorkerId: row.pool_worker_id ?? null,
-    name: row.name,
-    residentId: row.resident_id,
-    phone: row.phone,
-    address: row.address,
-    dailyWage: Number(row.daily_wage),
-    employmentDurationType: row.employment_duration_type,
-    workplaceType: row.workplace_type,
-    monthlyHours: Number(row.monthly_hours),
-    jobType: row.job_type,
-    teamName: row.team_name,
-    bankName: row.bank_name,
-    accountNumber: row.account_number,
-    accountHolder: row.account_holder,
-    calculationType: row.calculation_type,
-    manualNationalPension: Number(row.manual_national_pension),
-    manualHealthInsurance: Number(row.manual_health_insurance),
-    manualLongTermCare: Number(row.manual_long_term_care),
-    manualOtherDeduction: Number(row.manual_other_deduction),
+    name: row.name ?? '',
+    residentId: row.resident_id ?? '',
+    phone: row.phone ?? '',
+    address: row.address ?? '',
+    dailyWage: Number(row.daily_wage ?? 0),
+    employmentDurationType: row.employment_duration_type ?? 'under_1_month',
+    workplaceType: row.workplace_type ?? 'construction',
+    monthlyHours: Number(row.monthly_hours ?? 0),
+    jobType: row.job_type ?? '',
+    teamName: row.team_name ?? '',
+    bankName: row.bank_name ?? '',
+    accountNumber: row.account_number ?? '',
+    accountHolder: row.account_holder ?? '',
+    calculationType: row.calculation_type ?? 'daily_tax',
+    manualNationalPension: Number(row.manual_national_pension ?? 0),
+    manualHealthInsurance: Number(row.manual_health_insurance ?? 0),
+    manualLongTermCare: Number(row.manual_long_term_care ?? 0),
+    manualOtherDeduction: Number(row.manual_other_deduction ?? 0),
   };
 }
 
@@ -160,8 +160,8 @@ function mapEntry(row: LaborEntryRow): LaborEntry {
   return {
     workerId: row.worker_id,
     day: row.day,
-    units: Number(row.units),
-    note: row.note,
+    units: Number(row.units ?? 0),
+    note: row.note ?? '',
   };
 }
 
