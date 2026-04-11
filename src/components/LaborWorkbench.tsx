@@ -36,6 +36,7 @@ import {
 import LaborLedgerDocument from './LaborLedgerDocument';
 import LaborPrintSheets from './LaborPrintSheets';
 import LaborCalibrator from './LaborCalibrator';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 type LaborTab = 'companies' | 'pool' | 'project' | 'entries' | 'ledger' | 'report';
 type NoticeTone = 'info' | 'success' | 'error';
@@ -205,6 +206,7 @@ export default function LaborWorkbench() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedEntryCell, setSelectedEntryCell] = useState<{ workerId: string; day: number } | null>(null);
   const [printMode, setPrintMode] = useState<'ledger' | 'report' | null>(null);
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
@@ -524,17 +526,23 @@ export default function LaborWorkbench() {
     }
   };
 
-  const handleArchiveProject = async () => {
-    if (!selectedProject || !window.confirm(`"${selectedProject.name}" 프로젝트를 보관할까요?`)) return;
+  const handleDeleteProject = () => {
+    if (!selectedProject) return;
+    setDeleteModalOpen(true);
+  };
+
+  const performDeleteProject = async () => {
+    if (!selectedProject) return;
     try {
       await archiveLaborProject(selectedProject.id);
       const nextProjects = projects.filter((project) => project.id !== selectedProject.id);
       setProjects(nextProjects);
       setSelectedProjectId(nextProjects[0]?.id ?? null);
-      setNotice({ tone: 'success', message: '프로젝트를 보관했습니다.' });
+      setNotice({ tone: 'success', message: '프로젝트를 삭제했습니다.' });
+      setDeleteModalOpen(false);
     } catch (error) {
-      console.error('LaborWorkbench archive:', error);
-      setNotice({ tone: 'error', message: '프로젝트 보관에 실패했습니다.' });
+      console.error('LaborWorkbench delete:', error);
+      setNotice({ tone: 'error', message: '프로젝트 삭제에 실패했습니다.' });
     }
   };
 
@@ -765,7 +773,7 @@ export default function LaborWorkbench() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={handleCreateProject} className="cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">프로젝트 생성</button>
-            <button onClick={handleArchiveProject} disabled={!selectedProject} className="cursor-pointer rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900">프로젝트 보관</button>
+            <button onClick={handleDeleteProject} disabled={!selectedProject} className="cursor-pointer rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900">프로젝트 삭제</button>
             <button onClick={handleSave} disabled={saving || !selectedProject} className="cursor-pointer rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60">{saving ? '저장 중...' : 'Supabase 저장'}</button>
           </div>
         </div>
@@ -1237,6 +1245,17 @@ export default function LaborWorkbench() {
       )}
 
       <LaborPrintSheets printMode={printMode} meta={resolvedMeta as unknown as Parameters<typeof LaborPrintSheets>[0]['meta']} ledgerRows={ledgerRows} totals={totals} reportRows={reportRows} entries={entries} />
+
+      {selectedProject && (
+        <ConfirmDeleteModal
+          open={deleteModalOpen}
+          title="노무비 프로젝트 삭제"
+          description={`"${selectedProject.name}" 프로젝트와 관련 데이터가 삭제됩니다.\n계속하려면 아래에 프로젝트명을 정확히 입력하세요.`}
+          expectedText={selectedProject.name}
+          onConfirm={performDeleteProject}
+          onCancel={() => setDeleteModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

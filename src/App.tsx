@@ -11,6 +11,7 @@ import PinScreen, { isAuthed } from './components/PinScreen';
 import SyncIndicator from './components/SyncIndicator';
 import HistoryPanel from './components/HistoryPanel';
 import LaborWorkbench from './components/LaborWorkbench';
+import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
   constructor(props: { children: ReactNode }) {
@@ -94,6 +95,7 @@ function AppContent() {
   const [showHistory, setShowHistory] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [monthFilter, setMonthFilter] = useState<string | null>(null); // null = 전체, 'YY.MM' = 해당 월
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   // projects ref (doSync 등 콜백에서 최신 projects 참조용)
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
@@ -501,14 +503,14 @@ function AppContent() {
     );
   };
 
-  const deleteProject = async (id: string) => {
-    const target = projects.find((p) => p.id === id);
-    if (!target) return;
-    const input = prompt(`"${target.name}" 프로젝트를 삭제하려면\n프로젝트명을 정확히 입력하세요. (데이터 ${target.records.length}건 삭제)`);
-    if (input !== target.name) {
-      if (input !== null) alert('프로젝트명이 일치하지 않습니다.');
-      return;
-    }
+  const requestDeleteProject = (id: string) => {
+    if (!projects.find((p) => p.id === id)) return;
+    setDeleteTargetId(id);
+  };
+
+  const performDeleteProject = async () => {
+    const id = deleteTargetId;
+    if (!id) return;
     // Soft delete tree_records first to avoid CASCADE/trigger conflicts
     const { error: recError } = await supabase
       .from('tree_records')
@@ -520,6 +522,7 @@ function AppContent() {
     if (error) console.error('deleteProject:', error);
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (selectedId === id) setSelectedId(null);
+    setDeleteTargetId(null);
   };
 
   // PIN 화면
@@ -755,7 +758,7 @@ function AppContent() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteProject(p.id);
+                        requestDeleteProject(p.id);
                       }}
                       className="text-red-400 hover:text-red-500 active:text-red-600 cursor-pointer
                         text-sm px-2 py-2"
@@ -885,6 +888,21 @@ function AppContent() {
           onClose={() => setShowHistory(false)}
         />
       )}
+
+      {(() => {
+        const target = projects.find((p) => p.id === deleteTargetId);
+        if (!target) return null;
+        return (
+          <ConfirmDeleteModal
+            open={true}
+            title="프로젝트 삭제"
+            description={`"${target.name}" 프로젝트와 데이터 ${target.records.length}건이 삭제됩니다.\n계속하려면 아래에 프로젝트명을 정확히 입력하세요.`}
+            expectedText={target.name}
+            onConfirm={performDeleteProject}
+            onCancel={() => setDeleteTargetId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
