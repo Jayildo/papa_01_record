@@ -1,48 +1,49 @@
 import { useState } from 'react';
-
-const SESSION_KEY = 'papa_01_authed';
-
-export function isAuthed(): boolean {
-  return sessionStorage.getItem(SESSION_KEY) === 'true';
-}
-
-export function setAuthed() {
-  sessionStorage.setItem(SESSION_KEY, 'true');
-}
-
-async function verifyPin(input: string): Promise<boolean> {
-  // If hash is set, use hash comparison (secure)
-  const pinHash = import.meta.env.VITE_APP_PIN_HASH;
-  if (pinHash) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(input);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return hash === pinHash;
-  }
-  // Fallback: direct comparison (legacy)
-  const pin = import.meta.env.VITE_APP_PIN || '1124';
-  return input === pin;
-}
+import { supabase } from '../lib/supabase';
 
 interface Props {
   onSuccess: () => void;
 }
 
+async function loginWithPin(pin: string): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke('pin-login', {
+    body: { pin },
+  });
+  if (error) {
+    const status = (error as { context?: Response }).context?.status;
+    if (status === 401) return '비밀번호가 틀렸습니다';
+    return '서버 연결 실패. 잠시 후 다시 시도해주세요';
+  }
+  const session = data as
+    | { access_token?: string; refresh_token?: string }
+    | null;
+  if (!session?.access_token || !session?.refresh_token) {
+    return '로그인 실패';
+  }
+  const { error: setErr } = await supabase.auth.setSession({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+  });
+  if (setErr) return '세션 적용 실패. 다시 시도해주세요';
+  return null;
+}
+
 export default function PinScreen({ onSuccess }: Props) {
   const [pin, setPin] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    const ok = await verifyPin(pin);
-    if (ok) {
-      setAuthed();
+    if (busy || !pin) return;
+    setBusy(true);
+    const msg = await loginWithPin(pin);
+    if (msg === null) {
       onSuccess();
     } else {
-      setError(true);
+      setError(msg);
       setPin('');
     }
+    setBusy(false);
   };
 
   return (
@@ -60,30 +61,33 @@ export default function PinScreen({ onSuccess }: Props) {
             value={pin}
             onChange={(e) => {
               setPin(e.target.value);
-              setError(false);
+              setError('');
             }}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
+            disabled={busy}
             className={`w-full px-4 py-3 text-center text-xl tracking-widest rounded-xl border
               bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
               placeholder:text-gray-300 dark:placeholder:text-gray-600
+              disabled:opacity-60
               ${error
                 ? 'border-red-400 dark:border-red-500 ring-1 ring-red-300 dark:ring-red-500/30'
                 : 'border-gray-300 dark:border-gray-600'
               }`}
-            placeholder="····"
+            placeholder="······"
             autoFocus
           />
           {error && (
             <p className="text-red-500 dark:text-red-400 text-sm text-center mt-2">
-              비밀번호가 틀렸습니다
+              {error}
             </p>
           )}
           <button
             onClick={submit}
+            disabled={busy || !pin}
             className="w-full mt-4 bg-blue-600 text-white py-3 rounded-xl font-medium
-              cursor-pointer active:bg-blue-700"
+              cursor-pointer active:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            확인
+            {busy ? '확인 중…' : '확인'}
           </button>
         </div>
       </div>

@@ -1,0 +1,7 @@
+# Supabase project config (subset). Extend as needed.
+# Ref: https://supabase.com/docs/reference/cli/config
+
+[functions.pin-login]
+# PIN 로그인 엔드포인트는 세션 발급 이전에 호출되므로 JWT 검증을 끈다.
+# 내부적으로 APP_PIN_HASH 비교 + 1초 delay 로 인증 수행.
+verify_jwt = false

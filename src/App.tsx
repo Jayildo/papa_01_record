@@ -7,7 +7,7 @@ import { persistRecordsImmediate, persistProjectsImmediate, loadLocalProjects, l
 import { backupToGoogleSheets } from './utils/sheetsBackup';
 import InputTab from './components/InputTab';
 import ResultTab from './components/ResultTab';
-import PinScreen, { isAuthed } from './components/PinScreen';
+import PinScreen from './components/PinScreen';
 import SyncIndicator from './components/SyncIndicator';
 import HistoryPanel from './components/HistoryPanel';
 import LaborWorkbench from './components/LaborWorkbench';
@@ -85,7 +85,8 @@ function WorkspaceTabs({
 }
 
 function AppContent() {
-  const [authed, setAuthed] = useState(isAuthed);
+  // null = 세션 조회 중(초기), false = 로그인 필요, true = 인증됨
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const [workspace, setWorkspace] = useState<Workspace>('tree');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -110,6 +111,17 @@ function AppContent() {
   const isDirty = selectedId
     ? projects.find(p => p.id === selectedId)?.records.some(r => r._syncState !== 'synced') ?? false
     : false;
+
+  // Supabase Auth 세션 상태 추적 (PIN → pin-login Edge Function → setSession 경유)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthed(!!data.session);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthed(!!session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   // 다크모드
   useEffect(() => {
@@ -529,6 +541,10 @@ function AppContent() {
     setDeleteTargetId(null);
   };
 
+  // 세션 조회 중 (첫 렌더)
+  if (authed === null) {
+    return <div className="min-h-dvh bg-gray-50 dark:bg-gray-900" />;
+  }
   // PIN 화면
   if (!authed) {
     return <PinScreen onSuccess={() => setAuthed(true)} />;
